@@ -54,7 +54,7 @@ def parse_wetest_table(soup):
     rows = []
     for tr in soup.select("tbody tr"):
         row_data = [td.get_text(strip=True) for td in tr.select("td")]
-        if len(row_data) == len(header):
+        if header and len(row_data) == len(header):
             rows.append(row_data)
     return header, rows
 
@@ -69,38 +69,42 @@ def parse_uouin_text(page_text):
         if line.startswith("#"):
             if "线路" in line and "优选IP" in line:
                 header = re.split(r'\s+', line.strip('# \t'))
-        elif line[0].isdigit():
+        elif line and line[0].isdigit():
             parts = re.split(r'\s+', line)
-            if header and len(parts) >= len(header) - 2:
-                # Handle uouin's inconsistent spacing
-                time_parts = parts[len(header)-2:]
-                middle_parts = parts[:len(header)-2]
-                row = middle_parts + [" ".join(time_parts)]
+            # 针对时间列可能包含空格的问题进行特殊处理
+            if header and len(parts) >= len(header):
+                time_str = " ".join(parts[len(header)-2:])
+                row = parts[:len(header)-2] + [time_str]
+                if len(row) == len(header) -1: # Colo列可能为空
+                    row.insert(-1, 'N/A')
                 if len(row) == len(header):
                     rows.append(row)
     return header, rows
 
 def parse_hostmonit_table(soup):
-    header_elements = soup.select("thead th")
-    if not header_elements:
-        # Fallback for pages without thead
-        header_elements = soup.select("table tr:first-child th")
-    header = [th.get_text(strip=True) for th in header_elements]
-    
-    rows = []
-    row_elements = soup.select("tbody tr")
-    if not row_elements:
-        # Fallback for pages without tbody
-        row_elements = soup.select("table tr")[1:]
+    table = soup.find("table")
+    if not table:
+        return [], []
         
+    header_elements = table.select("thead th")
+    if not header_elements:
+        header_elements = table.select("tr:first-child th, tr:first-child td")
+    header = [th.get_text(strip=True) for th in header_elements]
+
+    rows = []
+    row_elements = table.select("tbody tr")
+    if not row_elements:
+        row_elements = table.select("tr")[1:]
+
     for tr in row_elements:
         row_data = []
         for td in tr.select("td"):
             cell_text = ' '.join(td.stripped_strings)
             row_data.append(cell_text.strip())
-        if len(row_data) == len(header):
+        if header and len(row_data) == len(header):
             rows.append(row_data)
     return header, rows
+
 
 def get_selenium_driver():
     print("Initializing Selenium WebDriver...")
@@ -111,27 +115,45 @@ def get_selenium_driver():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("log-level=3")
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36")
-    service = ChromeService(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    return driver
+    try:
+        service = ChromeService(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        return driver
+    except Exception as e:
+        print(f"Error initializing WebDriver: {e}")
+        # 在GitHub Actions中，我们也可以尝试直接使用预装的chromedriver
+        try:
+            print("Trying with pre-installed chromedriver...")
+            chrome_options.add_argument("--remote-debugging-port=9222")
+            service = ChromeService(executable_path='/usr/bin/chromedriver')
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            return driver
+        except Exception as e2:
+            print(f"Failed to initialize with pre-installed chromedriver as well: {e2}")
+            raise
 
 def fetch_page_content(driver, url):
     print(f"Fetching {url}...")
-    driver.get(url)
-    if "api.uouin.com" in url:
-        today_str = datetime.now().strftime('%Y/%m/%d')
-        start_time = time.time()
-        while time.time() - start_time < 20:
-            page_text = driver.find_element(By.TAG_NAME, 'body').text
-            if "正在加载" not in page_text and today_str in page_text:
-                print("Dynamic content loaded for uouin.")
-                return page_text
-            time.sleep(1)
-        print("Warning: Timed out waiting for dynamic content on uouin.")
-        return driver.find_element(By.TAG_NAME, 'body').text
-    else:
-        time.sleep(5)
-        return driver.page_source
+    try:
+        driver.get(url)
+        if "api.uouin.com" in url:
+            today_str = datetime.now().strftime('%Y/%m/%d')
+            start_time = time.time()
+            while time.time() - start_time < 20:
+                page_text = driver.find_element(By.TAG_NAME, 'body').text
+                if "正在加载" not in page_text and today_str in page_text:
+                    print("Dynamic content loaded for uouin.")
+                    return page_text
+                time.sleep(1)
+            print("Warning: Timed out waiting for dynamic content on uouin.")
+            return driver.find_element(By.TAG_NAME, 'body').text
+        else:
+            time.sleep(5)
+            return driver.page_source
+    except Exception as e:
+        print(f"Error fetching {url}: {e}")
+        return ""
+
 
 def format_to_tsv(header, rows):
     header_line = "\t".join(header)
@@ -152,6 +174,9 @@ def main():
             print(f"\n--- Processing target: {name} ---")
 
             content = fetch_page_content(driver, url)
+            if not content:
+                print(f"Content for {name} is empty. Skipping.")
+                continue
             
             if "api.uouin.com" in url:
                 header, rows = parse_uouin_text(content)
@@ -165,7 +190,12 @@ def main():
                 continue
 
             new_tsv_content = format_to_tsv(header, rows)
-            new_ips_content = "\n".join([row[target["ip_col_index"]] for row in rows if len(row) > target["ip_col_index"]])
+            
+            ip_col_index = target.get("ip_col_index")
+            if ip_col_index is not None:
+                new_ips_content = "\n".join([row[ip_col_index] for row in rows if len(row) > ip_col_index])
+            else:
+                new_ips_content = ""
 
             tsv_filepath = output_dir / f"{name}.tsv"
             ips_filepath = output_dir / f"{name}_ips.txt"
@@ -182,7 +212,8 @@ def main():
             if has_changed:
                 print(f"Content for {name} has changed. Writing new files.")
                 tsv_filepath.write_text(new_tsv_content, encoding='utf-8')
-                ips_filepath.write_text(new_ips_content, encoding='utf-8')
+                if new_ips_content:
+                    ips_filepath.write_text(new_ips_content, encoding='utf-8')
                 any_file_updated = True
             else:
                 print(f"Content for {name} has not changed. Skipping file write.")
