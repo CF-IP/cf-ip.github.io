@@ -8,7 +8,10 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium_stealth import stealth
 
 TARGETS = [
     {
@@ -71,11 +74,10 @@ def parse_uouin_text(page_text):
                 header = re.split(r'\s+', line.strip('# \t'))
         elif line and line[0].isdigit():
             parts = re.split(r'\s+', line)
-            # 针对时间列可能包含空格的问题进行特殊处理
             if header and len(parts) >= len(header):
                 time_str = " ".join(parts[len(header)-2:])
                 row = parts[:len(header)-2] + [time_str]
-                if len(row) == len(header) -1: # Colo列可能为空
+                if len(row) == len(header) -1:
                     row.insert(-1, 'N/A')
                 if len(row) == len(header):
                     rows.append(row)
@@ -84,6 +86,7 @@ def parse_uouin_text(page_text):
 def parse_hostmonit_table(soup):
     table = soup.find("table")
     if not table:
+        print("Parser Error: Table not found in hostmonit page.")
         return [], []
         
     header_elements = table.select("thead th")
@@ -105,55 +108,58 @@ def parse_hostmonit_table(soup):
             rows.append(row_data)
     return header, rows
 
-
 def get_selenium_driver():
-    print("Initializing Selenium WebDriver...")
+    print("Initializing Selenium WebDriver with Stealth...")
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("log-level=3")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36")
-    try:
-        service = ChromeService(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        return driver
-    except Exception as e:
-        print(f"Error initializing WebDriver: {e}")
-        # 在GitHub Actions中，我们也可以尝试直接使用预装的chromedriver
-        try:
-            print("Trying with pre-installed chromedriver...")
-            chrome_options.add_argument("--remote-debugging-port=9222")
-            service = ChromeService(executable_path='/usr/bin/chromedriver')
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            return driver
-        except Exception as e2:
-            print(f"Failed to initialize with pre-installed chromedriver as well: {e2}")
-            raise
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    
+    service = ChromeService(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    
+    stealth(driver,
+        languages=["en-US", "en"],
+        vendor="Google Inc.",
+        platform="Win32",
+        webgl_vendor="Intel Inc.",
+        renderer="Intel Iris OpenGL Engine",
+        fix_hairline=True,
+    )
+    return driver
 
-def fetch_page_content(driver, url):
+def fetch_page_content(driver, url, target_name):
     print(f"Fetching {url}...")
     try:
         driver.get(url)
         if "api.uouin.com" in url:
-            today_str = datetime.now().strftime('%Y/%m/%d')
-            start_time = time.time()
-            while time.time() - start_time < 20:
-                page_text = driver.find_element(By.TAG_NAME, 'body').text
-                if "正在加载" not in page_text and today_str in page_text:
-                    print("Dynamic content loaded for uouin.")
-                    return page_text
-                time.sleep(1)
-            print("Warning: Timed out waiting for dynamic content on uouin.")
+            WebDriverWait(driver, 20).until(
+                lambda d: "正在加载" not in d.find_element(By.TAG_NAME, 'body').text and datetime.now().strftime('%Y/%m/%d') in d.find_element(By.TAG_NAME, 'body').text
+            )
+            print("Dynamic content loaded for uouin.")
             return driver.find_element(By.TAG_NAME, 'body').text
+        elif "hostmonit.com" in url:
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "tbody tr"))
+            )
+            print("Dynamic content loaded for hostmonit.")
+            return driver.page_source
         else:
             time.sleep(5)
             return driver.page_source
     except Exception as e:
         print(f"Error fetching {url}: {e}")
+        print(f"--- Page source at time of error for {target_name} ---")
+        try:
+            print(driver.page_source[:1500])
+        except:
+            print("Could not get page source.")
+        print("----------------------------------------------------")
         return ""
-
 
 def format_to_tsv(header, rows):
     header_line = "\t".join(header)
@@ -173,7 +179,7 @@ def main():
             url = target["url"]
             print(f"\n--- Processing target: {name} ---")
 
-            content = fetch_page_content(driver, url)
+            content = fetch_page_content(driver, url, name)
             if not content:
                 print(f"Content for {name} is empty. Skipping.")
                 continue
