@@ -77,7 +77,7 @@ def parse_uouin_text(page_text):
             if header and len(parts) >= len(header):
                 time_str = " ".join(parts[len(header)-2:])
                 row = parts[:len(header)-2] + [time_str]
-                if len(row) == len(header) -1:
+                if len(row) == len(header) - 1:
                     row.insert(-1, 'N/A')
                 if len(row) == len(header):
                     rows.append(row)
