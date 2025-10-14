@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium_stealth import stealth
@@ -34,49 +35,45 @@ def parse_wetest_table(soup):
 
 def parse_uouin_text(page_text):
     lines = page_text.strip().splitlines()
-    header, rows, colo_index = [], [], -1
+    header, rows = [], []
+    colo_data_index = -1
+
+    for line in lines:
+        if line.startswith("#") and "线路" in line and "优选IP" in line:
+            header = re.split(r'\s+', line.strip())[1:]
+            if 'Colo' in header:
+                colo_data_index = header.index('Colo')
+                header.pop(colo_data_index)
+            break
+    
+    if not header:
+        return [], []
+
     for line in lines:
         line = line.strip()
-        if not line: continue
-        if line.startswith("#"):
-            if "线路" in line and "优选IP" in line:
-                temp_header = re.split(r'\s+', line.strip())
-                if temp_header[0] == '#':
-                    temp_header[0] = '#'
-                
-                if 'Colo' in temp_header:
-                    colo_index = temp_header.index('Colo')
-                    temp_header.pop(colo_index)
-                header = temp_header
-        elif line and line[0].isdigit():
-            parts = re.split(r'\s+', line, 1)
-            if len(parts) != 2: continue
+        if not line or not line[0].isdigit():
+            continue
+
+        parts = re.split(r'\s+', line.strip())
+        row_num = parts[0]
+        row_data = parts[1:]
+
+        if colo_data_index != -1 and len(row_data) > colo_data_index:
+            row_data.pop(colo_data_index)
+        
+        time_start_idx = len(header) - 1
+        if len(row_data) > time_start_idx:
+            time_parts = row_data[time_start_idx:]
+            time_str = " ".join(time_parts).replace("查询", "").strip()
             
-            row_num = parts[0]
-            rest_of_line = parts[1]
-            row_parts = re.split(r'\s+', rest_of_line)
+            final_row_data = row_data[:time_start_idx] + [time_str]
+            final_row = [row_num] + final_row_data
             
-            header_with_hash = ['#'] + header[1:]
+            if len(final_row) == len(header) + 1:
+                rows.append(final_row)
 
-            if len(row_parts) >= (len(header_with_hash) - 1):
-                if colo_index != -1 and len(row_parts) > (colo_index - 1):
-                    row_parts.pop(colo_index - 1)
-
-                time_col_start_index = len(header_with_hash) - 2
-                time_str = " ".join(row_parts[time_col_start_index:])
-                
-                final_row = ['#'+row_num] + row_parts[:time_col_start_index] + [time_str]
-                final_row[-1] = final_row[-1].replace("查询", "").strip()
-
-                if len(final_row) == len(header_with_hash):
-                    rows.append(final_row)
-    
-    if header and header[0] != '#':
-        header.insert(0, '#')
-        if colo_index != -1:
-             header = [h for h in header if h != 'Colo']
-
-    return header, rows
+    final_header = ['序号'] + header
+    return final_header, rows
 
 def parse_hostmonit_table(soup):
     table = soup.find("table")
