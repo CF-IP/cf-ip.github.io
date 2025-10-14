@@ -42,24 +42,34 @@ def parse_uouin_text(page_text):
             if "线路" in line and "优选IP" in line:
                 temp_header = re.split(r'\s+', line.strip())
                 if temp_header[0] == '#':
-                    temp_header[0] = '序号'
+                    temp_header[0] = '#' # Keep the hash symbol as the header
                 
                 if 'Colo' in temp_header:
                     colo_index = temp_header.index('Colo')
                     temp_header.pop(colo_index)
                 header = temp_header
         elif line and line[0].isdigit():
-            parts = re.split(r'\s+', line)
-            if header and len(parts) >= len(header):
-                if colo_index != -1 and len(parts) > colo_index:
-                    parts.pop(colo_index)
+            parts = re.split(r'\s+', line, 1) # Split only on the first space
+            if len(parts) != 2: continue
+            
+            row_num = parts[0]
+            rest_of_line = parts[1]
+            
+            row_parts = re.split(r'\s+', rest_of_line)
+            
+            if header and len(row_parts) >= (len(header) - 1):
+                if colo_index != -1 and len(row_parts) > (colo_index - 1):
+                    row_parts.pop(colo_index - 1)
 
-                time_col_index = len(header) - 1
-                time_str = " ".join(parts[time_col_index:])
-                row = parts[:time_col_index] + [time_str]
-                row[time_col_index] = row[time_col_index].replace("查询", "").strip()
-                if len(row) == len(header):
-                    rows.append(row)
+                time_col_start_index = len(header) - 2 
+                time_str = " ".join(row_parts[time_col_start_index:])
+                
+                final_row = ['#'+row_num] + row_parts[:time_col_start_index] + [time_str]
+                
+                final_row[-1] = final_row[-1].replace("查询", "").strip()
+
+                if len(final_row) == len(header):
+                    rows.append(final_row)
     return header, rows
 
 def parse_hostmonit_table(soup):
@@ -228,10 +238,14 @@ def main():
                 tsv_filepath = output_dir / f"{name}.tsv"
                 ips_filepath = output_dir / f"{name}_ips.txt"
                 tsv_filepath.write_text(data["new_tsv_content"], encoding='utf-8')
-
-                ip_col_index_num = target.get("ip_col_index")
-                if "api.uouin.com" in target["url"]: ip_col_index_num = 2
-                new_ips_content = "\n".join([row[ip_col_index_num] for row in rows if len(row) > ip_col_index_num]) if ip_col_index_num is not None else ""
+                
+                # Use column name to find IP index
+                ip_col_name = target.get('ip_col_name')
+                ip_col_index_num = -1
+                if ip_col_name and ip_col_name in header:
+                    ip_col_index_num = header.index(ip_col_name)
+                
+                new_ips_content = "\n".join([row[ip_col_index_num] for row in rows if len(row) > ip_col_index_num]) if ip_col_index_num != -1 else ""
                 if new_ips_content:
                     ips_filepath.write_text(new_ips_content, encoding='utf-8')
 
