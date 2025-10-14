@@ -266,7 +266,18 @@ def main():
         if all_line_ip_pairs:
             sy_filepath = output_dir / "sy.txt"
             unique_pairs = list(dict.fromkeys(all_line_ip_pairs))
-            sy_content = "\n".join(unique_pairs)
+            
+            ipv4_pairs = []
+            ipv6_pairs = []
+            for pair in unique_pairs:
+                if ':' in pair:
+                    ipv6_pairs.append(pair)
+                else:
+                    ipv4_pairs.append(pair)
+            
+            sorted_pairs = ipv4_pairs + ipv6_pairs
+            sy_content = "\n".join(sorted_pairs)
+            
             print("Writing sy.txt...")
             sy_filepath.write_text(sy_content, encoding='utf-8')
 
