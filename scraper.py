@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 import time
 from pathlib import Path
 from bs4 import BeautifulSoup
@@ -9,18 +9,54 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium_stealth import stealth
 import requests
 
 TARGETS = [
-    { "name": "wetest_edgeone_v4", "url": "https://www.wetest.vip/page/edgeone/address_v4.html", "parser": "parse_wetest_table", "ip_col_index": 1, "fetcher": "fetch_with_selenium" },
-    { "name": "wetest_cloudflare_v4", "url": "https://www.wetest.vip/page/cloudflare/address_v4.html", "parser": "parse_wetest_table", "ip_col_index": 1, "fetcher": "fetch_with_selenium" },
-    { "name": "wetest_cloudflare_v6", "url": "https://www.wetest.vip/page/cloudflare/address_v6.html", "parser": "parse_wetest_table", "ip_col_index": 1, "fetcher": "fetch_with_selenium" },
-    { "name": "api_uouin_com", "url": "https://api.uouin.com/cloudflare.html", "parser": "parse_uouin_text", "ip_col_index": 2, "fetcher": "fetch_with_selenium" },
-    { "name": "hostmonit_v4", "url": "https://stock.hostmonit.com/CloudFlareYes", "parser": "parse_hostmonit_table", "ip_col_index": 1, "fetcher": "fetch_with_phantomjscloud" },
-    { "name": "hostmonit_v6", "url": "https://stock.hostmonit.com/CloudFlareYesV6", "parser": "parse_hostmonit_table", "ip_col_index": 1, "fetcher": "fetch_with_phantomjscloud" },
+    {
+        "name": "wetest_edgeone_v4",
+        "url": "https://www.wetest.vip/page/edgeone/address_v4.html",
+        "parser": "parse_wetest_table",
+        "ip_col_index": 1,
+        "fetcher": "fetch_with_selenium",
+    },
+    {
+        "name": "wetest_cloudflare_v4",
+        "url": "https://www.wetest.vip/page/cloudflare/address_v4.html",
+        "parser": "parse_wetest_table",
+        "ip_col_index": 1,
+        "fetcher": "fetch_with_selenium",
+    },
+    {
+        "name": "wetest_cloudflare_v6",
+        "url": "https://www.wetest.vip/page/cloudflare/address_v6.html",
+        "parser": "parse_wetest_table",
+        "ip_col_index": 1,
+        "fetcher": "fetch_with_selenium",
+    },
+    {
+        "name": "api_uouin_com",
+        "url": "https://api.uouin.com/cloudflare.html",
+        "parser": "parse_uouin_text",
+        "ip_col_index": 2,
+        "fetcher": "fetch_with_selenium",
+    },
+    {
+        "name": "hostmonit_v4",
+        "url": "https://stock.hostmonit.com/CloudFlareYes",
+        "parser": "parse_hostmonit_table",
+        "ip_col_index": 1,
+        "fetcher": "fetch_with_phantomjscloud",
+    },
+    {
+        "name": "hostmonit_v6",
+        "url": "https://stock.hostmonit.com/CloudFlareYesV6",
+        "parser": "parse_hostmonit_table",
+        "ip_col_index": 1,
+        "fetcher": "fetch_with_phantomjscloud",
+    },
 ]
 
 def parse_wetest_table(soup):
@@ -34,31 +70,21 @@ def parse_wetest_table(soup):
 
 def parse_uouin_text(page_text):
     lines = page_text.strip().splitlines()
-    header, rows, colo_index = [], [], -1
+    header = []
+    rows = []
     for line in lines:
         line = line.strip()
         if not line: continue
         if line.startswith("#"):
             if "线路" in line and "优选IP" in line:
-                temp_header = re.split(r'\s+', line.strip())
-                if temp_header[0] == '#':
-                    temp_header = temp_header[1:]
-                    temp_header.insert(0, '#')
-                if 'Colo' in temp_header:
-                    colo_index = temp_header.index('Colo')
-                    temp_header.pop(colo_index)
-                header = temp_header
+                header = re.split(r'\s+', line.strip('# \t'))
         elif line and line[0].isdigit():
             parts = re.split(r'\s+', line)
             if header and len(parts) >= len(header):
-                if colo_index != -1 and len(parts) > colo_index:
-                    parts.pop(colo_index)
-                time_col_index = len(header) - 1
-                time_str = " ".join(parts[time_col_index:])
-                row = parts[:time_col_index] + [time_str]
-                row[time_col_index] = row[time_col_index].replace("查询", "").strip()
-                if len(row) == len(header):
-                    rows.append(row)
+                time_str = " ".join(parts[len(header)-2:])
+                row = parts[:len(header)-2] + [time_str]
+                if len(row) == len(header) - 1: row.insert(-1, 'N/A')
+                if len(row) == len(header): rows.append(row)
     return header, rows
 
 def parse_hostmonit_table(soup):
@@ -71,23 +97,23 @@ def parse_hostmonit_table(soup):
     row_elements = table.select("tbody tr")
     if not row_elements: row_elements = table.select("tr")[1:]
     for tr in row_elements:
-        row_data = [' '.join(td.stripped_strings).strip() for td in tr.select("td")]
+        row_data = [ ' '.join(td.stripped_strings).strip() for td in tr.select("td")]
         if header and len(row_data) == len(header):
             rows.append(row_data)
     return header, rows
 
 def get_selenium_driver():
     print("Initializing Selenium WebDriver with Stealth...")
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
     service = ChromeService(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     stealth(driver, languages=["en-US", "en"], vendor="Google Inc.", platform="Win32", webgl_vendor="Intel Inc.", renderer="Intel Iris OpenGL Engine", fix_hairline=True)
     return driver
 
@@ -96,33 +122,10 @@ def fetch_with_selenium(driver, url, target_name):
     try:
         driver.get(url)
         if "api.uouin.com" in url:
-            wait = WebDriverWait(driver, 35)
-            
-            # Step 1: Wait for any data to load (wait for the loading text to disappear)
-            wait.until(lambda d: "正在加载" not in d.find_element(By.TAG_NAME, 'body').text)
-            print("Initial content loaded.")
-            time.sleep(2) # Give it a moment for the first JS update to complete
-
-            # Step 2: Capture the timestamp of the first data row (this is likely the stale, cached data)
-            initial_text = driver.find_element(By.TAG_NAME, 'body').text
-            stale_timestamp = ""
-            match = re.search(r'(\d{4}/\d{2}/\d{2}\s\d{2}:\d{2}:\d{2})', initial_text)
-            if match:
-                stale_timestamp = match.group(1)
-                print(f"Captured intermediate/stale timestamp: {stale_timestamp}")
-            else:
-                print("Warning: Could not find initial timestamp. Will perform a longer blind wait.")
-                time.sleep(15) # Fallback to blind wait
-                return driver.find_element(By.TAG_NAME, 'body').text
-
-            # Step 3: Wait for the timestamp to change, which indicates the final, live data has loaded.
-            try:
-                print("Now waiting for the timestamp to update...")
-                wait.until(lambda d: stale_timestamp not in d.find_element(By.TAG_NAME, 'body').text)
-                print("Timestamp has updated. Data is fresh.")
-            except TimeoutException:
-                print("Warning: Timed out waiting for the final timestamp update. Using the intermediate data which might be slightly old.")
-
+            WebDriverWait(driver, 25).until(
+                lambda d: "正在加载" not in d.find_element(By.TAG_NAME, 'body').text and datetime.now().strftime('%Y/%m/%d') in d.find_element(By.TAG_NAME, 'body').text
+            )
+            print("Dynamic content loaded for uouin.")
             return driver.find_element(By.TAG_NAME, 'body').text
         else:
             time.sleep(5)
@@ -131,15 +134,18 @@ def fetch_with_selenium(driver, url, target_name):
         print(f"Error fetching {url} with Selenium: {e}")
         return ""
 
-
 def fetch_with_phantomjscloud(driver, url, target_name):
     print(f"Fetching {url} using PhantomJsCloud API...")
     api_key = "a-demo-key-with-low-quota-per-ip-address"
     api_url = f"https://PhantomJsCloud.com/api/browser/v2/{api_key}/"
     today_str_pjc = datetime.now().strftime('%Y-%m-%d')
     payload = {
-        "url": url, "renderType": "html",
-        "requestSettings": { "doneWhen": [{ "textExists": today_str_pjc }], "doneWhenTimeout": 25000 }
+        "url": url,
+        "renderType": "html",
+        "requestSettings": {
+            "doneWhen": [{ "textExists": today_str_pjc }],
+            "doneWhenTimeout": 25000
+        }
     }
     try:
         response = requests.post(api_url, json=payload, timeout=30)
@@ -153,15 +159,14 @@ def fetch_with_phantomjscloud(driver, url, target_name):
 def format_to_tsv(header, rows):
     header_line = "\t".join(header)
     row_lines = ["\t".join(map(str, row)) for row in rows]
-    return f"{header_line}\n" + "\n".join(row_lines)
+    return header_line + "\n" + "\n".join(row_lines)
 
 def main():
     output_dir = Path("data")
     output_dir.mkdir(exist_ok=True)
-    driver = None
+    driver = get_selenium_driver()
     any_file_updated = False
     try:
-        driver = get_selenium_driver()
         for target in TARGETS:
             name, url = target["name"], target["url"]
             print(f"\n--- Processing target: {name} ---")
@@ -174,20 +179,22 @@ def main():
                 continue
             
             parser_func = globals()[target["parser"]]
-            header, rows = parser_func(BeautifulSoup(content, 'html.parser') if "api.uouin.com" not in url else content)
+            if "api.uouin.com" in url:
+                header, rows = parser_func(content)
+            else:
+                header, rows = parser_func(BeautifulSoup(content, 'html.parser'))
 
             if not header or not rows:
                 print(f"Failed to parse data for {name}. Skipping.")
                 continue
 
             new_tsv_content = format_to_tsv(header, rows)
-            ip_col_index = target.get("ip_col_index", 1)
-            if "api.uouin.com" in url: ip_col_index = 2
-            
-            new_ips_content = "\n".join([row[ip_col_index] for row in rows if len(row) > ip_col_index])
+            ip_col_index = target.get("ip_col_index")
+            new_ips_content = "\n".join([row[ip_col_index] for row in rows if len(row) > ip_col_index]) if ip_col_index is not None else ""
 
             tsv_filepath = output_dir / f"{name}.tsv"
             ips_filepath = output_dir / f"{name}_ips.txt"
+
             has_changed = True
             if tsv_filepath.exists():
                 try:
@@ -205,9 +212,8 @@ def main():
             else:
                 print(f"Content for {name} has not changed. Skipping file write.")
     finally:
-        if driver:
-            print("\nClosing Selenium WebDriver.")
-            driver.quit()
+        print("\nClosing Selenium WebDriver.")
+        driver.quit()
     
     if not any_file_updated:
         print("\nNo files were updated.")
