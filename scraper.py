@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium_stealth import stealth
 import requests
@@ -97,36 +98,39 @@ def fetch_with_selenium(driver, url, target_name):
         if "api.uouin.com" in url:
             wait = WebDriverWait(driver, 35)
             
-            def is_timestamp_fresh(driver_instance):
-                try:
-                    beijing_tz = timezone(timedelta(hours=8))
-                    now_beijing = datetime.now(beijing_tz)
-                    body_text = driver_instance.find_element(By.TAG_NAME, 'body').text
-                    
-                    match = re.search(r'(\d{4}/\d{2}/\d{2}\s\d{2}:\d{2}:\d{2})', body_text)
-                    if match:
-                        timestamp_str = match.group(1)
-                        page_time = datetime.strptime(timestamp_str, '%Y/%m/%d %H:%M:%S').replace(tzinfo=beijing_tz)
-                        
-                        time_diff = now_beijing - page_time
-                        print(f"Checking timestamp... Now: {now_beijing.strftime('%H:%M:%S')}, Page: {page_time.strftime('%H:%M:%S')}, Difference: {time_diff}")
-                        
-                        if time_diff < timedelta(minutes=15):
-                            print(f"Timestamp is fresh. Proceeding.")
-                            return True
-                    return False
-                except Exception:
-                    return False
+            # Step 1: Wait for any data to load (wait for the loading text to disappear)
+            wait.until(lambda d: "正在加载" not in d.find_element(By.TAG_NAME, 'body').text)
+            print("Initial content loaded.")
+            time.sleep(2) # Give it a moment for the first JS update to complete
 
-            wait.until(is_timestamp_fresh)
-            print("Dynamic content with fresh data loaded for uouin.")
+            # Step 2: Capture the timestamp of the first data row (this is likely the stale, cached data)
+            initial_text = driver.find_element(By.TAG_NAME, 'body').text
+            stale_timestamp = ""
+            match = re.search(r'(\d{4}/\d{2}/\d{2}\s\d{2}:\d{2}:\d{2})', initial_text)
+            if match:
+                stale_timestamp = match.group(1)
+                print(f"Captured intermediate/stale timestamp: {stale_timestamp}")
+            else:
+                print("Warning: Could not find initial timestamp. Will perform a longer blind wait.")
+                time.sleep(15) # Fallback to blind wait
+                return driver.find_element(By.TAG_NAME, 'body').text
+
+            # Step 3: Wait for the timestamp to change, which indicates the final, live data has loaded.
+            try:
+                print("Now waiting for the timestamp to update...")
+                wait.until(lambda d: stale_timestamp not in d.find_element(By.TAG_NAME, 'body').text)
+                print("Timestamp has updated. Data is fresh.")
+            except TimeoutException:
+                print("Warning: Timed out waiting for the final timestamp update. Using the intermediate data which might be slightly old.")
+
             return driver.find_element(By.TAG_NAME, 'body').text
         else:
             time.sleep(5)
             return driver.page_source
     except Exception as e:
-        print(f"Error fetching or waiting for {url}: {e}")
+        print(f"Error fetching {url} with Selenium: {e}")
         return ""
+
 
 def fetch_with_phantomjscloud(driver, url, target_name):
     print(f"Fetching {url} using PhantomJsCloud API...")
