@@ -72,22 +72,38 @@ def parse_uouin_text(page_text):
     lines = page_text.strip().splitlines()
     header = []
     rows = []
+    colo_index = -1
+
     for line in lines:
         line = line.strip()
         if not line: continue
         if line.startswith("#"):
             if "线路" in line and "优选IP" in line:
-                header = re.split(r'\s+', line.strip())
-                if header[0] == '#': # 修正表头解析
-                    header = header[1:]
-                    header.insert(0, '#')
+                temp_header = re.split(r'\s+', line.strip())
+                if temp_header[0] == '#':
+                    temp_header = temp_header[1:]
+                    temp_header.insert(0, '#')
+                
+                if 'Colo' in temp_header:
+                    colo_index = temp_header.index('Colo')
+                    temp_header.pop(colo_index)
+                header = temp_header
+
         elif line and line[0].isdigit():
             parts = re.split(r'\s+', line)
             if header and len(parts) >= len(header):
-                time_str = " ".join(parts[len(header)-2:])
-                row = parts[:len(header)-2] + [time_str]
-                if len(row) == len(header) - 1: row.insert(-1, 'N/A')
-                if len(row) == len(header): rows.append(row)
+                if colo_index != -1 and len(parts) > colo_index:
+                    parts.pop(colo_index)
+
+                time_col_index = len(header) - 1
+                time_str = " ".join(parts[time_col_index:])
+                row = parts[:time_col_index] + [time_str]
+                
+                # 清洗时间列中的“查询”
+                row[time_col_index] = row[time_col_index].replace("查询", "").strip()
+
+                if len(row) == len(header):
+                    rows.append(row)
     return header, rows
 
 
@@ -127,11 +143,8 @@ def fetch_with_selenium(driver, url, target_name):
         driver.get(url)
         if "api.uouin.com" in url:
             wait = WebDriverWait(driver, 30)
-            
-            # 等待初始内容出现
             wait.until(lambda d: "CloudFlare优选IP" in d.find_element(By.TAG_NAME, 'body').text)
             
-            # 记录初始的第一行数据
             initial_first_row = ""
             try:
                 body_text = driver.find_element(By.TAG_NAME, 'body').text
@@ -140,17 +153,14 @@ def fetch_with_selenium(driver, url, target_name):
                         initial_first_row = line.strip()
                         break
             except:
-                pass # 初始可能没有数据行
+                pass
 
             if not initial_first_row:
-                 print("Warning: Could not find initial first row for uouin.")
-                 time.sleep(10) # Fallback to blind wait
+                 print("Warning: Could not find initial first row for uouin. Falling back to blind wait.")
+                 time.sleep(10)
             else:
                 print(f"Initial first row detected: {initial_first_row}")
-                # 等待第一行数据发生变化，这标志着新数据已加载
-                wait.until(
-                    lambda d: initial_first_row not in d.find_element(By.TAG_NAME, 'body').text
-                )
+                wait.until(lambda d: initial_first_row not in d.find_element(By.TAG_NAME, 'body').text)
             
             print("Dynamic content updated for uouin.")
             return driver.find_element(By.TAG_NAME, 'body').text
@@ -216,7 +226,11 @@ def main():
                 continue
 
             new_tsv_content = format_to_tsv(header, rows)
+            
             ip_col_index = target.get("ip_col_index")
+            if "api.uouin.com" in url: # 修正 uouin 的 IP 列索引
+                ip_col_index = 2
+
             new_ips_content = "\n".join([row[ip_col_index] for row in rows if len(row) > ip_col_index]) if ip_col_index is not None else ""
 
             tsv_filepath = output_dir / f"{name}.tsv"
