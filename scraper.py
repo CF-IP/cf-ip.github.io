@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium_stealth import stealth
+import requests
 
 TARGETS = [
     {
@@ -19,36 +20,42 @@ TARGETS = [
         "url": "https://www.wetest.vip/page/edgeone/address_v4.html",
         "parser": "parse_wetest_table",
         "ip_col_index": 1,
+        "fetcher": "fetch_with_selenium",
     },
     {
         "name": "wetest_cloudflare_v4",
         "url": "https://www.wetest.vip/page/cloudflare/address_v4.html",
         "parser": "parse_wetest_table",
         "ip_col_index": 1,
+        "fetcher": "fetch_with_selenium",
     },
     {
         "name": "wetest_cloudflare_v6",
         "url": "https://www.wetest.vip/page/cloudflare/address_v6.html",
         "parser": "parse_wetest_table",
         "ip_col_index": 1,
+        "fetcher": "fetch_with_selenium",
     },
     {
         "name": "api_uouin_com",
         "url": "https://api.uouin.com/cloudflare.html",
         "parser": "parse_uouin_text",
         "ip_col_index": 2,
+        "fetcher": "fetch_with_selenium",
     },
     {
         "name": "hostmonit_v4",
         "url": "https://stock.hostmonit.com/CloudFlareYes",
         "parser": "parse_hostmonit_table",
         "ip_col_index": 1,
+        "fetcher": "fetch_with_phantomjscloud",
     },
     {
         "name": "hostmonit_v6",
         "url": "https://stock.hostmonit.com/CloudFlareYesV6",
         "parser": "parse_hostmonit_table",
         "ip_col_index": 1,
+        "fetcher": "fetch_with_phantomjscloud",
     },
 ]
 
@@ -70,7 +77,10 @@ def parse_uouin_text(page_text):
         if not line: continue
         if line.startswith("#"):
             if "线路" in line and "优选IP" in line:
-                header = re.split(r'\s+', line.strip('# \t'))
+                header = re.split(r'\s+', line.strip())
+                if header[0] == '#': # 修正表头解析
+                    header = header[1:]
+                    header.insert(0, '#')
         elif line and line[0].isdigit():
             parts = re.split(r'\s+', line)
             if header and len(parts) >= len(header):
@@ -79,6 +89,7 @@ def parse_uouin_text(page_text):
                 if len(row) == len(header) - 1: row.insert(-1, 'N/A')
                 if len(row) == len(header): rows.append(row)
     return header, rows
+
 
 def parse_hostmonit_table(soup):
     table = soup.find("table")
@@ -110,34 +121,66 @@ def get_selenium_driver():
     stealth(driver, languages=["en-US", "en"], vendor="Google Inc.", platform="Win32", webgl_vendor="Intel Inc.", renderer="Intel Iris OpenGL Engine", fix_hairline=True)
     return driver
 
-def fetch_page_content(driver, url, target_name):
-    print(f"Fetching {url}...")
+def fetch_with_selenium(driver, url, target_name):
+    print(f"Fetching {url} using Selenium...")
     try:
         driver.get(url)
         if "api.uouin.com" in url:
-            WebDriverWait(driver, 25).until(
-                lambda d: "正在加载" not in d.find_element(By.TAG_NAME, 'body').text and datetime.now().strftime('%Y/%m/%d') in d.find_element(By.TAG_NAME, 'body').text
-            )
-            print("Dynamic content loaded for uouin.")
+            wait = WebDriverWait(driver, 30)
+            
+            # 等待初始内容出现
+            wait.until(lambda d: "CloudFlare优选IP" in d.find_element(By.TAG_NAME, 'body').text)
+            
+            # 记录初始的第一行数据
+            initial_first_row = ""
+            try:
+                body_text = driver.find_element(By.TAG_NAME, 'body').text
+                for line in body_text.splitlines():
+                    if line.strip().startswith('1'):
+                        initial_first_row = line.strip()
+                        break
+            except:
+                pass # 初始可能没有数据行
+
+            if not initial_first_row:
+                 print("Warning: Could not find initial first row for uouin.")
+                 time.sleep(10) # Fallback to blind wait
+            else:
+                print(f"Initial first row detected: {initial_first_row}")
+                # 等待第一行数据发生变化，这标志着新数据已加载
+                wait.until(
+                    lambda d: initial_first_row not in d.find_element(By.TAG_NAME, 'body').text
+                )
+            
+            print("Dynamic content updated for uouin.")
             return driver.find_element(By.TAG_NAME, 'body').text
-        elif "hostmonit.com" in url:
-            today_str = datetime.now().strftime('%Y-%m-%d')
-            print(f"Waiting for hostmonit content with date: {today_str}")
-            WebDriverWait(driver, 25).until(
-                lambda d: today_str in d.find_element(By.TAG_NAME, 'body').text
-            )
-            print("Dynamic content with correct date loaded for hostmonit.")
-            return driver.page_source
         else:
             time.sleep(5)
             return driver.page_source
     except Exception as e:
-        print(f"Error fetching or waiting for {url}: {e}")
-        try:
-            driver.save_screenshot(f"{target_name}_error.png")
-            print(f"Saved screenshot to {target_name}_error.png")
-        except Exception as se:
-            print(f"Could not save screenshot: {se}")
+        print(f"Error fetching {url} with Selenium: {e}")
+        return ""
+
+def fetch_with_phantomjscloud(driver, url, target_name):
+    print(f"Fetching {url} using PhantomJsCloud API...")
+    api_key = "a-demo-key-with-low-quota-per-ip-address"
+    api_url = f"https://PhantomJsCloud.com/api/browser/v2/{api_key}/"
+    today_str_pjc = datetime.now().strftime('%Y-%m-%d')
+    payload = {
+        "url": url,
+        "renderType": "html",
+        "requestSettings": {
+            "doneWhen": [{ "textExists": today_str_pjc }],
+            "doneWhenTimeout": 25000
+        }
+    }
+    try:
+        response = requests.post(api_url, json=payload, timeout=30)
+        response.raise_for_status()
+        print("Successfully fetched content from PhantomJsCloud.")
+        return response.text
+    except Exception as e:
+        print(f"Error fetching {url} with PhantomJsCloud: {e}")
         return ""
 
 def format_to_tsv(header, rows):
@@ -154,7 +197,10 @@ def main():
         for target in TARGETS:
             name, url = target["name"], target["url"]
             print(f"\n--- Processing target: {name} ---")
-            content = fetch_page_content(driver, url, name)
+            
+            fetcher_func = globals()[target["fetcher"]]
+            content = fetcher_func(driver, url, name)
+
             if not content:
                 print(f"Content for {name} is empty. Skipping.")
                 continue
