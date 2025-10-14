@@ -1,217 +1,280 @@
-const BASE_DOMAIN = "665966.xyz";
+import os
+import re
+from datetime import datetime
+import time
+from pathlib import Path
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium_stealth import stealth
+import requests
 
-const preferredDomains = [
-    "ct1", "ct2", "ct3", "ct4", "ct5",
-    "cu1", "cu2", "cu3", "cu4", "cu5",
-    "cm1", "cm2", "cm3", "cm4", "cm5",
-    "ty1", "ty2", "ty3", "ty4", "ty5",
-    "ipv61", "ipv62", "ipv63", "ipv64", "ipv65"
-];
+TARGETS = [
+    { "name": "wetest_edgeone_v4", "url": "https://www.wetest.vip/page/edgeone/address_v4.html", "parser": "parse_wetest_table", "ip_col_name": "优选地址", "line_col_name": "线路名称", "fetcher": "fetch_with_selenium" },
+    { "name": "wetest_cloudflare_v4", "url": "https://www.wetest.vip/page/cloudflare/address_v4.html", "parser": "parse_wetest_table", "ip_col_name": "优选地址", "line_col_name": "线路名称", "fetcher": "fetch_with_selenium" },
+    { "name": "wetest_cloudflare_v6", "url": "https://www.wetest.vip/page/cloudflare/address_v6.html", "parser": "parse_wetest_table", "ip_col_name": "优选地址", "line_col_name": "线路名称", "fetcher": "fetch_with_selenium" },
+    { "name": "api_uouin_com", "url": "https://api.uouin.com/cloudflare.html", "parser": "parse_uouin_text", "ip_col_name": "优选IP", "line_col_name": "线路", "fetcher": "fetch_with_selenium" },
+    { "name": "hostmonit_v4", "url": "https://stock.hostmonit.com/CloudFlareYes", "parser": "parse_hostmonit_table", "ip_col_name": "IP", "line_col_name": "Line", "fetcher": "fetch_with_phantomjscloud" },
+    { "name": "hostmonit_v6", "url": "https://stock.hostmonit.com/CloudFlareYesV6", "parser": "parse_hostmonit_table", "ip_col_name": "IP", "line_col_name": "Line", "fetcher": "fetch_with_phantomjscloud" },
+]
 
-const proxyPrefixes = {
-    'ca': '加拿大', 'de': '德国', 'sg': '新加坡', 'jp': '日本',
-    'se': '瑞典', 'us': '美国', 'fi': '芬兰', 'gb': '英国',
-    'nl': '荷兰', 'kr': '韩国', 'hk': '香港'
-};
-const proxyDomains = Object.keys(proxyPrefixes);
+def parse_wetest_table(soup):
+    header = [th.get_text(strip=True) for th in soup.select("thead th")]
+    rows = []
+    for tr in soup.select("tbody tr"):
+        row_data = [td.get_text(strip=True) for td in tr.select("td")]
+        if header and len(row_data) == len(header):
+            rows.append(row_data)
+    return header, rows
 
-export default {
-    async fetch(request) {
-        const url = new URL(request.url);
-        
-        if (url.pathname === '/cf') {
-            return handlePlainTextPath(preferredDomains, BASE_DOMAIN);
-        }
-        
-        if (url.pathname === '/proxy') {
-            return handlePlainTextPath(proxyDomains, BASE_DOMAIN);
-        }
-
-        return new Response(generateHtml(), {
-            headers: { 
-                'Content-Type': 'text/html; charset=UTF-8',
-                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'
-            },
-        });
-    },
-};
-
-function handlePlainTextPath(prefixList, baseDomain) {
-    const fullDomainList = prefixList.map(prefix => `${prefix}.${baseDomain}`).join('\n');
-    return new Response(fullDomainList, {
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-    });
-}
-
-function generateHtml() {
-    const updateTime = getUpdateTime();
-    const proxyData = generateProxyTableData(proxyDomains);
-    
-    return `
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>域名状态面板</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 10px; }
-        .container { max-width: 900px; margin: 0 auto; }
-        h2 { color: #bb86fc; border-bottom: 2px solid #333; padding-bottom: 10px; }
-        .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; background-color: #1e1e1e; box-shadow: 0 4px 8px rgba(0,0,0,0.3); min-width: 600px; }
-        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #333; white-space: nowrap; }
-        th { background-color: #333; color: #e0e0e0; }
-        tr.data-row { cursor: pointer; transition: background-color 0.2s ease; }
-        tr.data-row:hover { background-color: #383838; }
-        .copy-feedback { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: #03dac6; color: #121212; padding: 10px 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.5s ease, transform 0.5s ease; z-index: 1000; pointer-events: none; }
-        .copy-feedback.show { opacity: 1; transform: translateX(-50%) translateY(-10px); }
-        .placeholder-text { color: #666; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2>优选域名</h2>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr><th>序号</th><th>地址</th><th>归属地</th><th>更新时间</th></tr>
-                </thead>
-                <tbody id="preferred-tbody">
-                    ${preferredDomains.map((prefix, index) => `
-                        <tr id="row-${prefix}" class="data-row">
-                            <td>${index + 1}</td>
-                            <td>${prefix}.${BASE_DOMAIN}</td>
-                            <td class="location-cell placeholder-text">正在查询...</td>
-                            <td>${updateTime}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-        <h2>ProxyIP</h2>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr><th>序号</th><th>地址</th><th>归属地</th><th>更新时间</th></tr>
-                </thead>
-                <tbody>${generateProxyTableRows(proxyData, updateTime)}</tbody>
-            </table>
-        </div>
-    </div>
-    <div id="copy-feedback" class="copy-feedback"></div>
-    <script>
-        const BASE_DOMAIN = "${BASE_DOMAIN}";
-        const preferredDomains = ${JSON.stringify(preferredDomains)};
-        const updateTime = "${updateTime}";
-
-        async function fetchWithTimeout(resource, options = {}, timeout = 8000) {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), timeout);
-            const response = fetch(resource, { ...options, signal: controller.signal });
-            response.then(() => clearTimeout(id)).catch(() => clearTimeout(id));
-            return response;
-        }
-
-        async function resolveDomain(domain, recordType) {
-            try {
-                const response = await fetchWithTimeout(\`https://1.1.1.1/dns-query?name=\${encodeURIComponent(domain)}&type=\${recordType}\`, {
-                    headers: { 'Accept': 'application/dns-json' },
-                });
-                if (!response.ok) return null;
-                const data = await response.json();
-                if (data.Answer && data.Answer.length > 0) {
-                    return data.Answer.map(ans => ans.data);
-                }
-            } catch (error) {
-                console.error(\`DNS query failed for \${domain}:\`, error);
-            }
-            return null;
-        }
-
-        async function getIpLocation(ip) {
-            try {
-                const targetUrl = \`http://ip-api.com/json/\${ip}?lang=zh-CN&fields=status,message,country\`;
-                const proxyUrl = \`https://api.allorigins.win/get?url=\${encodeURIComponent(targetUrl)}\`;
-                const response = await fetchWithTimeout(proxyUrl);
-                if (!response.ok) return \`代理查询失败(\${response.status})\`;
-                const data = await response.json();
-                const ipApiData = JSON.parse(data.contents);
-                if (ipApiData.status === 'success') return ipApiData.country || '未知';
-                return \`查询失败(\${ipApiData.message})\`;
-            } catch (error) {
-                return '查询超时';
-            }
-        }
-
-        async function updateRow(prefix) {
-            const row = document.getElementById(\`row-\${prefix}\`);
-            const locationCell = row.querySelector('.location-cell');
-            const fullDomain = \`\${prefix}.\${BASE_DOMAIN}\`;
+def parse_uouin_text(page_text):
+    lines = page_text.strip().splitlines()
+    header, rows, colo_index = [], [], -1
+    for line in lines:
+        line = line.strip()
+        if not line: continue
+        if line.startswith("#"):
+            if "线路" in line and "优选IP" in line:
+                temp_header = re.split(r'\s+', line.strip())
+                if temp_header[0] == '#':
+                    temp_header[0] = '#'
+                
+                if 'Colo' in temp_header:
+                    colo_index = temp_header.index('Colo')
+                    temp_header.pop(colo_index)
+                header = temp_header
+        elif line and line[0].isdigit():
+            parts = re.split(r'\s+', line, 1)
+            if len(parts) != 2: continue
             
-            const isIPv6 = prefix.startsWith('ipv6');
-            let ips = await resolveDomain(fullDomain, isIPv6 ? 'AAAA' : 'A');
-            if (!ips) {
-                ips = await resolveDomain(fullDomain, isIPv6 ? 'A' : 'AAAA');
-            }
+            row_num = parts[0]
+            rest_of_line = parts[1]
+            row_parts = re.split(r'\s+', rest_of_line)
+            
+            header_with_hash = ['#'] + header[1:]
 
-            if (!ips || ips.length === 0) {
-                locationCell.textContent = '解析无记录';
-            } else {
-                locationCell.textContent = await getIpLocation(ips[0]);
-            }
-            locationCell.classList.remove('placeholder-text');
-        }
+            if len(row_parts) >= (len(header_with_hash) - 1):
+                if colo_index != -1 and len(row_parts) > (colo_index - 1):
+                    row_parts.pop(colo_index - 1)
 
-        document.addEventListener('DOMContentLoaded', () => {
-            preferredDomains.forEach(prefix => updateRow(prefix));
+                time_col_start_index = len(header_with_hash) - 2
+                time_str = " ".join(row_parts[time_col_start_index:])
+                
+                final_row = ['#'+row_num] + row_parts[:time_col_start_index] + [time_str]
+                final_row[-1] = final_row[-1].replace("查询", "").strip()
 
-            const container = document.querySelector('.container');
-            const feedback = document.getElementById('copy-feedback');
-            let feedbackTimeout;
-            container.addEventListener('click', (e) => {
-                const row = e.target.closest('tr.data-row');
-                if (!row) return;
-                const address = row.cells[1].textContent.trim();
-                if (!address) return;
-                navigator.clipboard.writeText(address).then(() => {
-                    feedback.textContent = '已复制: ' + address;
-                    feedback.classList.add('show');
-                    clearTimeout(feedbackTimeout);
-                    feedbackTimeout = setTimeout(() => { feedback.classList.remove('show'); }, 2000);
-                }).catch(err => { console.error('复制失败: ', err); });
-            });
-        });
-    </script>
-</body>
-</html>`;
-}
+                if len(final_row) == len(header_with_hash):
+                    rows.append(final_row)
+    
+    if header and header[0] != '#':
+        header.insert(0, '#')
+        if colo_index != -1:
+             header = [h for h in header if h != 'Colo']
 
-function generateProxyTableRows(data, updateTime) {
-    return data.map((item, index) => `
-        <tr class="data-row">
-            <td>${index + 1}</td>
-            <td>${item.address}</td>
-            <td>${item.location}</td>
-            <td>${updateTime}</td>
-        </tr>
-    `).join('');
-}
+    return header, rows
 
-function generateProxyTableData(prefixList) {
-    return prefixList.map(prefix => ({
-        address: `${prefix}.${BASE_DOMAIN}`,
-        location: proxyPrefixes[prefix] || '未知'
-    }));
-}
+def parse_hostmonit_table(soup):
+    table = soup.find("table")
+    if not table: return [], []
+    header_elements = table.select("thead th")
+    if not header_elements: header_elements = table.select("tr:first-child th, tr:first-child td")
+    header = [th.get_text(strip=True) for th in header_elements]
+    rows = []
+    row_elements = table.select("tbody tr")
+    if not row_elements: row_elements = table.select("tr")[1:]
+    for tr in row_elements:
+        row_data = [' '.join(td.stripped_strings).strip() for td in tr.select("td")]
+        if header and len(row_data) == len(header):
+            rows.append(row_data)
+    return header, rows
 
-function getUpdateTime() {
-    const now = new Date();
-    const beijingTime = new Date(now.getTime() + 8 * 3600 * 1000);
-    const minutes = beijingTime.getUTCMinutes();
-    const roundedMinutes = Math.floor(minutes / 10) * 10;
-    beijingTime.setUTCMinutes(roundedMinutes, 0, 0);
-    const hours = beijingTime.getUTCHours().toString().padStart(2, '0');
-    const finalMinutes = beijingTime.getUTCMinutes().toString().padStart(2, '0');
-    return `${hours}:${finalMinutes}`;
-}
+def get_selenium_driver():
+    print("Initializing Selenium WebDriver with Stealth...")
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    service = ChromeService(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    stealth(driver, languages=["en-US", "en"], vendor="Google Inc.", platform="Win32", webgl_vendor="Intel Inc.", renderer="Intel Iris OpenGL Engine", fix_hairline=True)
+    return driver
+
+def fetch_with_selenium(driver, url, target_name):
+    print(f"Fetching {url} using Selenium...")
+    try:
+        driver.get(url)
+        if "api.uouin.com" in url:
+            wait = WebDriverWait(driver, 35)
+            wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "CloudFlare优选IP"))
+            wait.until(lambda d: "正在加载" not in d.find_element(By.TAG_NAME, 'body').text)
+            time.sleep(2)
+            
+            initial_text = driver.find_element(By.TAG_NAME, 'body').text
+            stale_timestamp = ""
+            match = re.search(r'(\d{4}/\d{2}/\d{2}\s\d{2}:\d{2}:\d{2})', initial_text)
+            if match:
+                stale_timestamp = match.group(1)
+                print(f"Captured intermediate/stale timestamp: {stale_timestamp}")
+            else:
+                print("Warning: Could not find initial timestamp. Proceeding with a longer blind wait.")
+                time.sleep(15)
+                return driver.find_element(By.TAG_NAME, 'body').text
+
+            try:
+                print("Now waiting for the timestamp to update...")
+                wait.until(lambda d: stale_timestamp not in d.find_element(By.TAG_NAME, 'body').text)
+                print("Timestamp has updated. Data is fresh.")
+            except TimeoutException:
+                print("Warning: Timed out waiting for the final timestamp update. Using the intermediate data.")
+
+            return driver.find_element(By.TAG_NAME, 'body').text
+        else:
+            time.sleep(5)
+            return driver.page_source
+    except Exception as e:
+        print(f"Error fetching {url} with Selenium: {e}")
+        return ""
+
+def fetch_with_phantomjscloud(driver, url, target_name):
+    print(f"Fetching {url} using PhantomJsCloud API...")
+    api_key = "a-demo-key-with-low-quota-per-ip-address"
+    api_url = f"https://PhantomJsCloud.com/api/browser/v2/{api_key}/"
+    today_str_pjc = datetime.now().strftime('%Y-%m-%d')
+    payload = {
+        "url": url, "renderType": "html",
+        "requestSettings": { "doneWhen": [{ "textExists": today_str_pjc }], "doneWhenTimeout": 25000 }
+    }
+    try:
+        response = requests.post(api_url, json=payload, timeout=30)
+        response.raise_for_status()
+        print("Successfully fetched content from PhantomJsCloud.")
+        return response.text
+    except Exception as e:
+        print(f"Error fetching {url} with PhantomJsCloud: {e}")
+        return ""
+
+def format_to_tsv(header, rows):
+    header_line = "\t".join(header)
+    row_lines = ["\t".join(map(str, row)) for row in rows]
+    return f"{header_line}\n" + "\n".join(row_lines)
+
+def main():
+    output_dir = Path("data")
+    output_dir.mkdir(exist_ok=True)
+    driver = None
+    any_file_updated = False
+    all_line_ip_pairs = []
+    processed_targets_data = []
+
+    try:
+        driver = get_selenium_driver()
+        for target in TARGETS:
+            name, url = target["name"], target["url"]
+            print(f"\n--- Processing target: {name} ---")
+            
+            fetcher_func = globals()[target["fetcher"]]
+            content = fetcher_func(driver, url, name)
+
+            if not content:
+                print(f"Content for {name} is empty. Skipping.")
+                processed_targets_data.append({"target": target, "header": None, "rows": None})
+                continue
+            
+            parser_func = globals()[target["parser"]]
+            header, rows = parser_func(BeautifulSoup(content, 'html.parser') if "api.uouin.com" not in url else content)
+
+            if not header or not rows:
+                print(f"Failed to parse data for {name}. Skipping.")
+            
+            processed_targets_data.append({"target": target, "header": header, "rows": rows})
+
+    finally:
+        if driver:
+            print("\nClosing Selenium WebDriver.")
+            driver.quit()
+    
+    for data in processed_targets_data:
+        target, header, rows = data["target"], data["header"], data["rows"]
+        name = target["name"]
+
+        if not header or not rows:
+            continue
+
+        tsv_filepath = output_dir / f"{name}.tsv"
+        new_tsv_content = format_to_tsv(header, rows)
+        
+        has_changed = True
+        if tsv_filepath.exists():
+            try:
+                if tsv_filepath.read_text(encoding='utf-8') == new_tsv_content:
+                    has_changed = False
+            except Exception as e:
+                print(f"Error reading old file {tsv_filepath}: {e}")
+
+        if has_changed:
+            any_file_updated = True
+            print(f"Content for {name} has changed.")
+            data["has_changed"] = True
+        else:
+            print(f"Content for {name} has not changed.")
+            data["has_changed"] = False
+
+        data["new_tsv_content"] = new_tsv_content
+    
+    if any_file_updated:
+        print("\nOne or more source files have changed. Writing all files...")
+        for data in processed_targets_data:
+            target, header, rows = data["target"], data["header"], data["rows"]
+            name = target["name"]
+
+            if not header or not rows:
+                continue
+                
+            if data.get("has_changed", False):
+                print(f"Writing updated files for {name}...")
+                tsv_filepath = output_dir / f"{name}.tsv"
+                ips_filepath = output_dir / f"{name}_ips.txt"
+                tsv_filepath.write_text(data["new_tsv_content"], encoding='utf-8')
+                
+                ip_col_name = target.get('ip_col_name')
+                ip_col_index_num = -1
+                if ip_col_name and ip_col_name in header:
+                    ip_col_index_num = header.index(ip_col_name)
+                
+                new_ips_content = "\n".join([row[ip_col_index_num] for row in rows if len(row) > ip_col_index_num]) if ip_col_index_num != -1 else ""
+                if new_ips_content:
+                    ips_filepath.write_text(new_ips_content, encoding='utf-8')
+
+            try:
+                ip_col_name = target['ip_col_name']
+                line_col_name = target['line_col_name']
+                if ip_col_name in header and line_col_name in header:
+                    ip_col_idx = header.index(ip_col_name)
+                    line_col_idx = header.index(line_col_name)
+                    for row in rows:
+                        if len(row) > ip_col_idx and len(row) > line_col_idx:
+                            all_line_ip_pairs.append(f"{row[line_col_idx]} {row[ip_col_idx]}")
+            except (ValueError, KeyError, IndexError) as e:
+                print(f"Could not find required columns for {name} for sy.txt aggregation: {e}")
+
+        if all_line_ip_pairs:
+            sy_filepath = output_dir / "sy.txt"
+            unique_pairs = list(dict.fromkeys(all_line_ip_pairs))
+            sy_content = "\n".join(unique_pairs)
+            print("Writing sy.txt...")
+            sy_filepath.write_text(sy_content, encoding='utf-8')
+
+    else:
+        print("\nNo source files have changed. Nothing to write.")
+
+if __name__ == "__main__":
+    main()
