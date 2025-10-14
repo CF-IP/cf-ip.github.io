@@ -41,35 +41,43 @@ def parse_uouin_text(page_text):
         if line.startswith("#"):
             if "线路" in line and "优选IP" in line:
                 temp_header = re.split(r'\s+', line.strip())
-                if temp_header[0] == '#':
-                    temp_header[0] = '#' # Keep the hash symbol as the header
-                
                 if 'Colo' in temp_header:
                     colo_index = temp_header.index('Colo')
                     temp_header.pop(colo_index)
                 header = temp_header
         elif line and line[0].isdigit():
-            parts = re.split(r'\s+', line, 1) # Split only on the first space
+            parts = re.split(r'\s+', line, 1) # 只在第一个空格处分割，分离出序号
             if len(parts) != 2: continue
             
-            row_num = parts[0]
-            rest_of_line = parts[1]
-            
+            rest_of_line = parts[1] # 序号之后的所有内容
             row_parts = re.split(r'\s+', rest_of_line)
             
-            if header and len(row_parts) >= (len(header) - 1):
+            # 加上'#'作为第一列，模拟原始表头
+            header_with_hash = ['#'] + header[1:]
+
+            if len(row_parts) >= (len(header_with_hash) - 1):
                 if colo_index != -1 and len(row_parts) > (colo_index - 1):
                     row_parts.pop(colo_index - 1)
 
-                time_col_start_index = len(header) - 2 
+                time_col_start_index = len(header_with_hash) - 2
                 time_str = " ".join(row_parts[time_col_start_index:])
                 
-                final_row = ['#'+row_num] + row_parts[:time_col_start_index] + [time_str]
+                # 构建最终行，以 '#' 作为第一列
+                final_row = ['#'] + row_parts[:time_col_start_index] + [time_str]
                 
+                # 清洗时间列
                 final_row[-1] = final_row[-1].replace("查询", "").strip()
 
-                if len(final_row) == len(header):
+                if len(final_row) == len(header_with_hash):
                     rows.append(final_row)
+    
+    # 将表头的第一列也改为'#'，与数据行对齐
+    if header and header[0] != '#':
+        header.insert(0, '#')
+        # 如果Colo被移除，确保header长度正确
+        if colo_index != -1:
+             header = [h for h in header if h != 'Colo']
+
     return header, rows
 
 def parse_hostmonit_table(soup):
@@ -239,7 +247,6 @@ def main():
                 ips_filepath = output_dir / f"{name}_ips.txt"
                 tsv_filepath.write_text(data["new_tsv_content"], encoding='utf-8')
                 
-                # Use column name to find IP index
                 ip_col_name = target.get('ip_col_name')
                 ip_col_index_num = -1
                 if ip_col_name and ip_col_name in header:
