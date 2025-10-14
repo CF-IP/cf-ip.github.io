@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 from pathlib import Path
 from bs4 import BeautifulSoup
@@ -9,7 +9,6 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium_stealth import stealth
 import requests
@@ -99,13 +98,11 @@ def parse_uouin_text(page_text):
                 time_str = " ".join(parts[time_col_index:])
                 row = parts[:time_col_index] + [time_str]
                 
-                # 清洗时间列中的“查询”
                 row[time_col_index] = row[time_col_index].replace("查询", "").strip()
 
                 if len(row) == len(header):
                     rows.append(row)
     return header, rows
-
 
 def parse_hostmonit_table(soup):
     table = soup.find("table")
@@ -143,26 +140,28 @@ def fetch_with_selenium(driver, url, target_name):
         driver.get(url)
         if "api.uouin.com" in url:
             wait = WebDriverWait(driver, 30)
-            wait.until(lambda d: "CloudFlare优选IP" in d.find_element(By.TAG_NAME, 'body').text)
             
-            initial_first_row = ""
-            try:
-                body_text = driver.find_element(By.TAG_NAME, 'body').text
-                for line in body_text.splitlines():
-                    if line.strip().startswith('1'):
-                        initial_first_row = line.strip()
-                        break
-            except:
-                pass
+            def is_timestamp_recent(driver):
+                try:
+                    now_beijing = datetime.utcnow() + timedelta(hours=8)
+                    body_text = driver.find_element(By.TAG_NAME, 'body').text
+                    
+                    for line in body_text.splitlines():
+                        if line.strip().startswith('1 '):
+                            match = re.search(r'(\d{4}/\d{2}/\d{2}\s\d{2}:\d{2}:\d{2})', line)
+                            if match:
+                                timestamp_str = match.group(1)
+                                page_time = datetime.strptime(timestamp_str, '%Y/%m/%d %H:%M:%S')
+                                
+                                if (now_beijing - page_time) < timedelta(minutes=15):
+                                    print(f"Found recent timestamp: {page_time}. Data is fresh.")
+                                    return True
+                    return False
+                except Exception:
+                    return False
 
-            if not initial_first_row:
-                 print("Warning: Could not find initial first row for uouin. Falling back to blind wait.")
-                 time.sleep(10)
-            else:
-                print(f"Initial first row detected: {initial_first_row}")
-                wait.until(lambda d: initial_first_row not in d.find_element(By.TAG_NAME, 'body').text)
-            
-            print("Dynamic content updated for uouin.")
+            wait.until(is_timestamp_recent)
+            print("Dynamic content updated for uouin with recent data.")
             return driver.find_element(By.TAG_NAME, 'body').text
         else:
             time.sleep(5)
@@ -228,7 +227,7 @@ def main():
             new_tsv_content = format_to_tsv(header, rows)
             
             ip_col_index = target.get("ip_col_index")
-            if "api.uouin.com" in url: # 修正 uouin 的 IP 列索引
+            if "api.uouin.com" in url:
                 ip_col_index = 2
 
             new_ips_content = "\n".join([row[ip_col_index] for row in rows if len(row) > ip_col_index]) if ip_col_index is not None else ""
