@@ -223,7 +223,6 @@ def main():
             if not header or not rows:
                 continue
                 
-            # Write individual files
             if data.get("has_changed", False):
                 print(f"Writing updated files for {name}...")
                 tsv_filepath = output_dir / f"{name}.tsv"
@@ -236,7 +235,6 @@ def main():
                 if new_ips_content:
                     ips_filepath.write_text(new_ips_content, encoding='utf-8')
 
-            # Aggregate for sy.txt
             try:
                 ip_col_name = target['ip_col_name']
                 line_col_name = target['line_col_name']
@@ -249,9 +247,8 @@ def main():
             except (ValueError, KeyError, IndexError) as e:
                 print(f"Could not find required columns for {name} for sy.txt aggregation: {e}")
 
-        # Generate and write sy.txt
         if all_line_ip_pairs:
-            sy_filepath = Path("sy.txt")
+            sy_filepath = output_dir / "sy.txt"
             unique_pairs = list(dict.fromkeys(all_line_ip_pairs))
             sy_content = "\n".join(unique_pairs)
             print("Writing sy.txt...")
