@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 from pathlib import Path
 from bs4 import BeautifulSoup
@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium_stealth import stealth
 import requests
@@ -72,7 +73,6 @@ def parse_uouin_text(page_text):
     header = []
     rows = []
     colo_index = -1
-
     for line in lines:
         line = line.strip()
         if not line: continue
@@ -87,7 +87,6 @@ def parse_uouin_text(page_text):
                     colo_index = temp_header.index('Colo')
                     temp_header.pop(colo_index)
                 header = temp_header
-
         elif line and line[0].isdigit():
             parts = re.split(r'\s+', line)
             if header and len(parts) >= len(header):
@@ -97,9 +96,7 @@ def parse_uouin_text(page_text):
                 time_col_index = len(header) - 1
                 time_str = " ".join(parts[time_col_index:])
                 row = parts[:time_col_index] + [time_str]
-                
                 row[time_col_index] = row[time_col_index].replace("查询", "").strip()
-
                 if len(row) == len(header):
                     rows.append(row)
     return header, rows
@@ -141,27 +138,33 @@ def fetch_with_selenium(driver, url, target_name):
         if "api.uouin.com" in url:
             wait = WebDriverWait(driver, 30)
             
-            def is_timestamp_recent(driver):
-                try:
-                    now_beijing = datetime.utcnow() + timedelta(hours=8)
-                    body_text = driver.find_element(By.TAG_NAME, 'body').text
-                    
-                    for line in body_text.splitlines():
-                        if line.strip().startswith('1 '):
-                            match = re.search(r'(\d{4}/\d{2}/\d{2}\s\d{2}:\d{2}:\d{2})', line)
-                            if match:
-                                timestamp_str = match.group(1)
-                                page_time = datetime.strptime(timestamp_str, '%Y/%m/%d %H:%M:%S')
-                                
-                                if (now_beijing - page_time) < timedelta(minutes=15):
-                                    print(f"Found recent timestamp: {page_time}. Data is fresh.")
-                                    return True
-                    return False
-                except Exception:
-                    return False
+            # Step 1: Wait for initial (possibly stale) data to load
+            wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "CloudFlare优选IP"))
+            wait.until(lambda d: "正在加载" not in d.find_element(By.TAG_NAME, 'body').text)
+            time.sleep(2) # Give it a moment to settle
+            
+            # Step 2: Capture the timestamp of the first data row
+            initial_text = driver.find_element(By.TAG_NAME, 'body').text
+            initial_timestamp = ""
+            match = re.search(r'(\d{4}/\d{2}/\d{2}\s\d{2}:\d{2}:\d{2})', initial_text)
+            if match:
+                initial_timestamp = match.group(1)
+                print(f"Captured initial/stale timestamp: {initial_timestamp}")
+            else:
+                print("Warning: Could not find initial timestamp. Proceeding with a longer blind wait.")
+                time.sleep(15)
+                return driver.find_element(By.TAG_NAME, 'body').text
 
-            wait.until(is_timestamp_recent)
-            print("Dynamic content updated for uouin with recent data.")
+            # Step 3: Wait for the timestamp to change, indicating the final update
+            try:
+                update_wait = WebDriverWait(driver, 20) # A shorter wait for the second update
+                update_wait.until(
+                    lambda d: initial_timestamp not in d.find_element(By.TAG_NAME, 'body').text
+                )
+                print("Timestamp has updated. Data is fresh.")
+            except Exception:
+                print("Warning: Timed out waiting for timestamp to update. Using the data that was loaded.")
+
             return driver.find_element(By.TAG_NAME, 'body').text
         else:
             time.sleep(5)
@@ -176,12 +179,8 @@ def fetch_with_phantomjscloud(driver, url, target_name):
     api_url = f"https://PhantomJsCloud.com/api/browser/v2/{api_key}/"
     today_str_pjc = datetime.now().strftime('%Y-%m-%d')
     payload = {
-        "url": url,
-        "renderType": "html",
-        "requestSettings": {
-            "doneWhen": [{ "textExists": today_str_pjc }],
-            "doneWhenTimeout": 25000
-        }
+        "url": url, "renderType": "html",
+        "requestSettings": { "doneWhen": [{ "textExists": today_str_pjc }], "doneWhenTimeout": 25000 }
     }
     try:
         response = requests.post(api_url, json=payload, timeout=30)
@@ -225,16 +224,12 @@ def main():
                 continue
 
             new_tsv_content = format_to_tsv(header, rows)
-            
             ip_col_index = target.get("ip_col_index")
-            if "api.uouin.com" in url:
-                ip_col_index = 2
-
+            if "api.uouin.com" in url: ip_col_index = 2
             new_ips_content = "\n".join([row[ip_col_index] for row in rows if len(row) > ip_col_index]) if ip_col_index is not None else ""
 
             tsv_filepath = output_dir / f"{name}.tsv"
             ips_filepath = output_dir / f"{name}_ips.txt"
-
             has_changed = True
             if tsv_filepath.exists():
                 try:
