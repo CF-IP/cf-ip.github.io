@@ -16,11 +16,12 @@ from selenium_stealth import stealth
 import requests
 
 TARGETS = [
+    { "name": "wetest_edgeone_v4", "url": "https://www.wetest.vip/page/edgeone/address_v4.html", "parser": "parse_wetest_table", "ip_col_name": "优选地址", "line_col_name": "线路名称", "fetcher": "fetch_with_selenium" },
     { "name": "wetest_cloudflare_v4", "url": "https://www.wetest.vip/page/cloudflare/address_v4.html", "parser": "parse_wetest_table", "ip_col_name": "优选地址", "line_col_name": "线路名称", "fetcher": "fetch_with_selenium" },
     { "name": "wetest_cloudflare_v6", "url": "https://www.wetest.vip/page/cloudflare/address_v6.html", "parser": "parse_wetest_table", "ip_col_name": "优选地址", "line_col_name": "线路名称", "fetcher": "fetch_with_selenium" },
     { "name": "api_uouin_com", "url": "https://api.uouin.com/cloudflare.html", "parser": "parse_uouin_text", "ip_col_name": "优选IP", "line_col_name": "线路", "fetcher": "fetch_with_selenium" },
-    { "name": "hostmonit_v4", "url": "https://stock.hostmonit.com/CloudFlareYes", "parser": "parse_hostmonit_table", "ip_col_name": "IP", "line_col_name": "Line", "fetcher": "fetch_with_phantomjscloud" },
-    { "name": "hostmonit_v6", "url": "https://stock.hostmonit.com/CloudFlareYesV6", "parser": "parse_hostmonit_table", "ip_col_name": "IP", "line_col_name": "Line", "fetcher": "fetch_with_phantomjscloud" },
+    { "name": "hostmonit_v4", "url": "https://stock.hostmonit.com/CloudFlareYes", "parser": "parse_hostmonit_table", "ip_col_name": "IP", "line_col_name": "Line", "fetcher": "fetch_with_selenium" },
+    { "name": "hostmonit_v6", "url": "https://stock.hostmonit.com/CloudFlareYesV6", "parser": "parse_hostmonit_table", "ip_col_name": "IP", "line_col_name": "Line", "fetcher": "fetch_with_selenium" },
 ]
 
 def parse_wetest_table(soup):
@@ -133,29 +134,16 @@ def fetch_with_selenium(driver, url, target_name):
                 print("Warning: Timed out waiting for the final timestamp update. Using the intermediate data.")
 
             return driver.find_element(By.TAG_NAME, 'body').text
+        elif "stock.hostmonit.com" in url:
+            wait = WebDriverWait(driver, 20)
+            wait.until(EC.visibility_of_element_located((By.TAG_NAME, "table")))
+            print("Table found on hostmonit. Content loaded.")
+            return driver.page_source
         else:
             time.sleep(5)
             return driver.page_source
     except Exception as e:
         print(f"Error fetching {url} with Selenium: {e}")
-        return ""
-
-def fetch_with_phantomjscloud(driver, url, target_name):
-    print(f"Fetching {url} using PhantomJsCloud API...")
-    api_key = "a-demo-key-with-low-quota-per-ip-address"
-    api_url = f"https://PhantomJsCloud.com/api/browser/v2/{api_key}/"
-    today_str_pjc = datetime.now().strftime('%Y-%m-%d')
-    payload = {
-        "url": url, "renderType": "html",
-        "requestSettings": { "doneWhen": [{ "textExists": today_str_pjc }], "doneWhenTimeout": 25000 }
-    }
-    try:
-        response = requests.post(api_url, json=payload, timeout=30)
-        response.raise_for_status()
-        print("Successfully fetched content from PhantomJsCloud.")
-        return response.text
-    except Exception as e:
-        print(f"Error fetching {url} with PhantomJsCloud: {e}")
         return ""
 
 def format_to_tsv(header, rows):
