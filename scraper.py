@@ -16,7 +16,6 @@ from selenium_stealth import stealth
 import requests
 
 TARGETS = [
-    { "name": "wetest_edgeone_v4", "url": "https://www.wetest.vip/page/edgeone/address_v4.html", "parser": "parse_wetest_table", "ip_col_name": "优选地址", "line_col_name": "线路名称", "fetcher": "fetch_with_selenium" },
     { "name": "wetest_cloudflare_v4", "url": "https://www.wetest.vip/page/cloudflare/address_v4.html", "parser": "parse_wetest_table", "ip_col_name": "优选地址", "line_col_name": "线路名称", "fetcher": "fetch_with_selenium" },
     { "name": "wetest_cloudflare_v6", "url": "https://www.wetest.vip/page/cloudflare/address_v6.html", "parser": "parse_wetest_table", "ip_col_name": "优选地址", "line_col_name": "线路名称", "fetcher": "fetch_with_selenium" },
     { "name": "api_uouin_com", "url": "https://api.uouin.com/cloudflare.html", "parser": "parse_uouin_text", "ip_col_name": "优选IP", "line_col_name": "线路", "fetcher": "fetch_with_selenium" },
@@ -274,6 +273,16 @@ def main():
                     ipv6_pairs.append(pair)
                 else:
                     ipv4_pairs.append(pair)
+            
+            line_order = {
+                "移动": 0,
+                "电信": 1,
+                "联通": 2,
+                "多线": 3
+            }
+            default_order_value = 99
+
+            ipv4_pairs.sort(key=lambda pair: line_order.get(pair.split()[0], default_order_value))
             
             sorted_pairs = ipv4_pairs + ipv6_pairs
             sy_content = "\n".join(sorted_pairs)
