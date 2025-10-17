@@ -7,47 +7,42 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #38bdf8;
-            --light-bg: #0c0a09;
-            --content-bg: rgba(23, 23, 23, 0.5);
-            --border-color: rgba(255, 255, 255, 0.15);
-            --text-color: #f2f2f2;
-            --text-light: #a3a3a3;
+            --primary-color: #38bdf8; --light-bg: #0c0a09; --content-bg: rgba(23, 23, 23, 0.5);
+            --border-color: rgba(255, 255, 255, 0.15); --text-color: #f2f2f2; --text-light: #a3a3a3;
             --font-family-sans: 'Inter', 'Noto Sans SC', sans-serif;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { font-size: 16px; }
-        body { font-family: var(--font-family-sans); background-color: var(--light-bg); color: var(--text-color); line-height: 1.65; overflow-x: hidden; padding: 0; position: relative; transition: background-color .5s ease; background-size: cover; background-position: center; background-attachment: fixed; }
+        body { font-family: var(--font-family-sans); background-color: var(--light-bg); color: var(--text-color); line-height: 1.65; overflow-x: hidden; position: relative; background-size: cover; background-position: center; background-attachment: fixed; }
         body::before { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; background: radial-gradient(at 27% 37%, hsla(215, 98%, 61%, .4) 0px, transparent 50%), radial-gradient(at 97% 21%, hsla(125, 98%, 72%, .2) 0px, transparent 50%), radial-gradient(at 52% 99%, hsla(355, 98%, 76%, .3) 0px, transparent 50%), radial-gradient(at 10% 29%, hsla(256, 96%, 68%, .3) 0px, transparent 50%), radial-gradient(at 97% 96%, hsla(38, 60%, 74%, .2) 0px, transparent 50%), radial-gradient(at 33% 50%, hsla(222, 67%, 73%, .3) 0px, transparent 50%), radial-gradient(at 79% 53%, hsla(343, 68%, 73%, .2) 0px, transparent 50%); animation: auroraBG 20s ease-in-out infinite alternate; }
-        @keyframes auroraBG { from { transform: scale(1); } to { transform: scale(1.5); } }
-        .app-container { max-width: 1100px; margin: 0 auto; padding: 0 1rem; position: relative; z-index: 1; }
-        header { text-align: center; margin-top: 2rem; margin-bottom: 2rem; }
+        @keyframes auroraBG { to { transform: scale(1.5); } }
+        .app-container { max-width: 1100px; margin: 0 auto; padding: 0 1rem; z-index: 1; }
+        header { text-align: center; margin: 2rem 0; }
         header h1 { font-size: 2.25em; color: var(--primary-color); font-weight: 700; text-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
         .card { background-color: rgba(23, 23, 23, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; box-shadow: 0 3px 8px rgba(0, 0, 0, .25); padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid var(--border-color); }
         .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: .75rem; border-bottom: 1px solid var(--border-color); }
         .section-header h2 { font-size: 1.6em; font-weight: 600; margin: 0; }
-        .btn { display: inline-flex; align-items: center; justify-content: center; font-weight: 500; text-align: center; cursor: pointer; user-select: none; background: rgba(56, 189, 248, 0.2); border: 1px solid var(--primary-color); color: var(--primary-color); padding: .5em 1em; font-size: 1em; border-radius: 8px; transition: all .2s ease-in-out; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; font-weight: 500; cursor: pointer; user-select: none; background: rgba(56, 189, 248, 0.2); border: 1px solid var(--primary-color); color: var(--primary-color); padding: .5em 1em; font-size: 1em; border-radius: 8px; transition: all .2s ease-in-out; text-decoration: none; }
         .btn:hover { background-color: var(--primary-color); color: #fff; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(56, 189, 248, 0.2); }
-        .app-download-buttons, .subscription-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
-        .app-download-buttons .btn, .subscription-buttons .btn { width: 100%; margin: 0; }
-        #appModal { display: none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, .6); justify-content: center; align-items: center; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+        .button-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+        .button-grid .btn { width: 100%; margin: 0; }
+        #appModal { display: none; position: fixed; z-index: 10000; inset: 0; background-color: rgba(0, 0, 0, .6); justify-content: center; align-items: center; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
         .app-modal-content { background-color: var(--content-bg); padding: 2rem; border: 1px solid var(--border-color); border-radius: 12px; width: 95%; max-width: 800px; max-height: 90vh; overflow-y: auto; box-shadow: 0 5px 15px rgba(0, 0, 0, .3); }
         .app-modal-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
         .app-modal-header h3 { margin: 0; color: var(--primary-color); }
-        .modal-close-btn { font-size: 1.5rem; font-weight: 700; line-height: 1; color: var(--text-light); cursor: pointer; background: none; border: none; padding: 0; }
+        .modal-close-btn { font-size: 1.5rem; font-weight: 700; color: var(--text-light); cursor: pointer; background: none; border: none; padding: 0; }
         .app-list-item { display: flex; flex-direction: column; padding: 1rem; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 1rem; }
         .app-name { font-size: 1.1em; font-weight: 600; }
         .app-links a { display: block; color: var(--primary-color); text-decoration: none; margin-top: .5rem; word-break: break-all; }
         .app-links a:hover { text-decoration: underline; }
         .app-links span { color: var(--text-light); }
-        .social-links { display: flex; justify-content: center; align-items: center; gap: 1.5rem; margin-top: 1rem; }
+        .social-links { display: flex; justify-content: center; gap: 1.5rem; margin-top: 1rem; }
         .social-links a { color: var(--text-light); text-decoration: none; transition: all 0.2s ease-in-out; }
         .social-links a:hover { color: var(--primary-color); transform: scale(1.1); }
         .social-links svg { width: 32px; height: 32px; }
         #toastNotification { position: fixed; top: 2rem; right: 2rem; color: #fff; padding: 1rem 1.5rem; border-radius: 8px; z-index: 10001; opacity: 0; visibility: hidden; transform: translateY(30px); transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.2); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); pointer-events: none; }
         @media (max-width: 768px) {
-            html { font-size: 15px; }
-            .app-container { padding: 0 .8rem; }
+            html { font-size: 15px; } .app-container { padding: 0 .8rem; }
             header { margin-top: 2.5rem; margin-bottom: 1.5rem; }
             #toastNotification { top: 1rem; right: 1rem; left: 1rem; text-align: center; }
         }
@@ -58,32 +53,22 @@
         <header>
             <h1>Cloudflare Snippets</h1>
             <div class="social-links">
-                <a href="https://t.me/crow187" target="_blank" rel="noopener noreferrer" aria-label="Telegram">
-                    <svg role="img" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="m9.417 15.181-.397 5.584c.568 0 .814-.244 1.109-.537l2.663-2.545 5.518 4.041c1.012.564 1.725.267 1.998-.931L23.456 5.016c.346-1.623-.556-2.32-1.541-1.825L1.094 8.795c-1.611.642-1.604 1.534-.283 1.932l5.228 1.641 12.375-7.722c.577-.353 1.115-.162.679.227z"/></svg>
-                </a>
-                <a href="https://github.com/crow1874" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-                    <svg role="img" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-                </a>
+                <a href="https://t.me/crow187" target="_blank" rel="noopener noreferrer" aria-label="Telegram"><svg fill="currentColor" viewBox="0 0 24 24"><path d="m9.417 15.181-.397 5.584c.568 0 .814-.244 1.109-.537l2.663-2.545 5.518 4.041c1.012.564 1.725.267 1.998-.931L23.456 5.016c.346-1.623-.556-2.32-1.541-1.825L1.094 8.795c-1.611.642-1.604 1.534-.283 1.932l5.228 1.641 12.375-7.722c.577-.353 1.115-.162.679.227z"/></svg></a>
+                <a href="https://github.com/crow1874" target="_blank" rel="noopener noreferrer" aria-label="GitHub"><svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a>
             </div>
         </header>
-
-        <div class="card subscription-section">
-            <div class="section-header">
-                <h2>订阅区域</h2>
-            </div>
-            <div class="subscription-buttons">
+        <div class="card">
+            <div class="section-header"><h2>订阅区域</h2></div>
+            <div class="button-grid">
                 <button class="btn" data-clipboard-text="https://google.com/">Xray 订阅</button>
                 <button class="btn" data-clipboard-text="https://google.com/">clash 订阅</button>
                 <button class="btn" data-clipboard-text="https://google.com/">sing box 订阅</button>
                 <button class="btn" data-clipboard-text="https://google.com/">Surge 订阅</button>
             </div>
         </div>
-
-        <div class="card app-download-section">
-            <div class="section-header">
-                <h2>APP 下载</h2>
-            </div>
-            <div class="app-download-buttons">
+        <div class="card">
+            <div class="section-header"><h2>APP 下载</h2></div>
+            <div class="button-grid">
                 <button class="btn" data-platform="android">安卓</button>
                 <button class="btn" data-platform="windows">Windows</button>
                 <button class="btn" data-platform="mac">Mac</button>
@@ -91,159 +76,90 @@
             </div>
         </div>
     </div>
-
     <div id="appModal">
         <div class="app-modal-content">
-            <div class="app-modal-header">
-                <h3 id="appModalTitle"></h3>
-                <button class="modal-close-btn">×</button>
-            </div>
+            <div class="app-modal-header"><h3 id="appModalTitle"></h3><button class="modal-close-btn">×</button></div>
             <div class="app-modal-body" id="appModalBody"></div>
         </div>
     </div>
-
     <div id="toastNotification"></div>
-
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const appButtons = document.querySelectorAll('.app-download-section .btn');
             const appModal = document.getElementById('appModal');
+            const toast = document.getElementById('toastNotification');
             const baseUrl = window.location.origin;
+            let toastTimeout, colorIndex = 0;
+            const toastColors = ['#38bdf8', '#34d399', '#f59e0b', '#ec4899', '#8b5cf6'];
 
             const downloadData = {
-                android: [
-                    { name: 'Karing', repo: 'KaringX/karing', keywords: ['apk', 'universal-release'] },
-                    { name: 'Sing-Box', repo: 'SagerNet/sing-box', keywords: ['apk', 'universal'] },
-                    { name: 'V2rayNG', repo: '2dust/v2rayNG', keywords: ['apk', 'arm64-v8a'] },
-                    { name: 'Clash Meta', repo: 'MetaCubeX/ClashMetaForAndroid', keywords: ['apk', 'universal'] }
-                ],
-                ios: [
-                    { name: 'Shadowrocket', fixedUrl: 'https://apps.apple.com/us/app/shadowrocket/id932747118' },
-                    { name: 'Sing-Box', fixedUrl: 'https://apps.apple.com/us/app/sing-box-vt/id6673731168' }
-                ],
-                windows: [
-                    { name: 'Clash Verge', repo: 'MetaCubeX/clash-verge', keywords: ['exe', 'x64', 'portable'] },
-                    { name: 'V2rayN', repo: '2dust/v2rayN', keywords: ['v2rayN.zip'] },
-                    { name: 'ClashN', repo: '2dust/clashN', keywords: ['clashN.zip'] }
-                ],
-                mac: [
-                    { name: 'Clash Verge', repo: 'MetaCubeX/clash-verge', keywords: ['dmg', 'x64'] },
-                    { name: 'ClashX Meta', repo: 'MetaCubeX/ClashX.Meta', keywords: ['dmg'] }
-                ]
+                android: [ { name: 'Karing', repo: 'KaringX/karing', keywords: ['apk', 'universal-release'] }, { name: 'Sing-Box', repo: 'SagerNet/sing-box', keywords: ['apk', 'universal'] }, { name: 'V2rayNG', repo: '2dust/v2rayNG', keywords: ['apk', 'arm64-v8a'] }, { name: 'Clash Meta', repo: 'MetaCubeX/ClashMetaForAndroid', keywords: ['apk', 'universal'] } ],
+                ios: [ { name: 'Shadowrocket', fixedUrl: 'https://apps.apple.com/us/app/shadowrocket/id932747118' }, { name: 'Sing-Box', fixedUrl: 'https://apps.apple.com/us/app/sing-box-vt/id6673731168' } ],
+                windows: [ { name: 'Clash Verge', repo: 'MetaCubeX/clash-verge', keywords: ['exe', 'x64', 'portable'] }, { name: 'V2rayN', repo: '2dust/v2rayN', keywords: ['v2rayN.zip'] }, { name: 'ClashN', repo: '2dust/clashN', keywords: ['clashN.zip'] } ],
+                mac: [ { name: 'Clash Verge', repo: 'MetaCubeX/clash-verge', keywords: ['dmg', 'x64'] }, { name: 'ClashX Meta', repo: 'MetaCubeX/ClashX.Meta', keywords: ['dmg'] } ]
             };
-
-            function getAcceleratedUrl(url) {
-                if (url.includes('github.com')) {
-                    return baseUrl + '/' + url.replace('://', ':/');
-                }
-                return url;
-            }
-
+            const getAcceleratedUrl = (url) => url.includes('github.com') ? `${baseUrl}/${url.replace('://', ':/')}` : url;
+            const showToast = (message, isSuccess = true) => {
+                clearTimeout(toastTimeout);
+                toast.textContent = message;
+                toast.style.backgroundColor = isSuccess ? toastColors[colorIndex] : '#ef4444';
+                toast.style.borderColor = isSuccess ? toastColors[colorIndex] : '#ef4444';
+                if(isSuccess) colorIndex = (colorIndex + 1) % toastColors.length;
+                toast.style.visibility = 'visible'; toast.style.opacity = '1'; toast.style.transform = 'translateY(0)';
+                toastTimeout = setTimeout(() => {
+                    toast.style.opacity = '0'; toast.style.transform = 'translateY(-30px)';
+                    setTimeout(() => { toast.style.visibility = 'hidden'; toast.style.transform = 'translateY(30px)'; }, 400);
+                }, 3000);
+            };
             async function getLatestReleaseAsset(repo, keywords) {
                 try {
                     const response = await fetch(getAcceleratedUrl(`https://api.github.com/repos/${repo}/releases`));
-                    if (!response.ok) return null;
+                    if (!response.ok) throw new Error('API request failed');
                     const releases = await response.json();
-                    if (!releases || releases.length === 0) return null;
-                    const latestRelease = releases[0];
-                    if (!latestRelease.assets || latestRelease.assets.length === 0) return null;
-
-                    const asset = latestRelease.assets.find(a => {
-                        const assetName = a.name.toLowerCase();
-                        return keywords.every(kw => assetName.includes(kw.toLowerCase()));
-                    });
-                    if (asset) return asset.browser_download_url;
-                    
-                    const fallbackAsset = latestRelease.assets.find(a => {
-                         const assetName = a.name.toLowerCase();
-                         return keywords.some(kw => assetName.includes(kw.toLowerCase()));
-                    });
-                    return fallbackAsset ? fallbackAsset.browser_download_url : latestRelease.assets[0].browser_download_url;
-
-                } catch (e) {
-                    return null;
-                }
+                    const latest = releases[0];
+                    if (!latest || !latest.assets.length) return null;
+                    const asset = latest.assets.find(a => keywords.every(kw => a.name.toLowerCase().includes(kw))) || latest.assets.find(a => keywords.some(kw => a.name.toLowerCase().includes(kw))) || latest.assets[0];
+                    return asset ? asset.browser_download_url : null;
+                } catch (e) { console.error(e); return null; }
             }
-
             async function openAppModal(platform) {
                 const platformName = { android: '安卓', ios: '苹果', windows: 'Windows', mac: 'Mac' }[platform];
                 appModal.querySelector('#appModalTitle').textContent = `${platformName}客户端下载`;
                 const modalBody = appModal.querySelector('#appModalBody');
                 modalBody.innerHTML = '<p>正在获取最新版本...</p>';
                 appModal.style.display = 'flex';
-                const apps = downloadData[platform];
                 let content = '';
-                for (const app of apps) {
-                    let linksHtml = '';
+                for (const app of downloadData[platform]) {
+                    let linkHtml = '<span>获取失败</span>';
                     if (app.fixedUrl) {
-                        linksHtml = `<a href="${getAcceleratedUrl(app.fixedUrl)}" target="_blank" rel="noopener noreferrer">${app.fixedUrl.split('/').pop()}</a>`;
+                        linkHtml = `<a href="${app.fixedUrl}" target="_blank" rel="noopener noreferrer">${app.fixedUrl.split('/').pop()}</a>`;
                     } else if (app.repo) {
                         const url = await getLatestReleaseAsset(app.repo, app.keywords);
-                        if (url) {
-                            linksHtml = `<a href="${getAcceleratedUrl(url)}" target="_blank" rel="noopener noreferrer">${url.split('/').pop()}</a>`;
-                        } else {
-                            const manualLink = `https://github.com/${app.repo}/releases`;
-                            linksHtml = `<a href="${manualLink}" target="_blank" rel="noopener noreferrer">获取失败, 请手动下载</a>`;
-                        }
+                        linkHtml = url ? `<a href="${getAcceleratedUrl(url)}" target="_blank" rel="noopener noreferrer">${url.split('/').pop()}</a>` : `<a href="https://github.com/${app.repo}/releases" target="_blank" rel="noopener noreferrer">获取失败, 请手动下载</a>`;
                     }
-                    content += `<div class="app-list-item"><span class="app-name">${app.name}</span><div class="app-links">${linksHtml}</div></div>`;
+                    content += `<div class="app-list-item"><span class="app-name">${app.name}</span><div class="app-links">${linkHtml}</div></div>`;
                 }
                 modalBody.innerHTML = content;
             }
-
-            appButtons.forEach(button => {
-                button.addEventListener('click', () => openAppModal(button.dataset.platform));
-            });
-
-            if (appModal) {
-                appModal.querySelector('.modal-close-btn').addEventListener('click', () => { appModal.style.display = 'none'; });
-                appModal.addEventListener('click', e => { if (e.target === appModal) appModal.style.display = 'none'; });
-            }
-
-            const subButtons = document.querySelectorAll('.subscription-section .btn');
-            const toast = document.getElementById('toastNotification');
-            let toastTimeout;
-            
-            const toastColors = ['#38bdf8', '#34d399', '#f59e0b', '#ec4899', '#8b5cf6'];
-            let colorIndex = 0;
-
-            subButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    const textToCopy = button.dataset.clipboardText;
-                    const subName = button.textContent.trim();
-
-                    navigator.clipboard.writeText(textToCopy).then(() => {
-                        const currentColor = toastColors[colorIndex];
-                        toast.textContent = `复制 ${subName} 成功！`;
-                        toast.style.backgroundColor = currentColor;
-                        toast.style.border = `1px solid ${currentColor}`;
-                        
-                        clearTimeout(toastTimeout);
-                        
-                        toast.style.visibility = 'visible';
-                        toast.style.opacity = '1';
-                        toast.style.transform = 'translateY(0)';
-
-                        toastTimeout = setTimeout(() => {
-                            toast.style.opacity = '0';
-                            toast.style.transform = 'translateY(-30px)';
-                            toastTimeout = setTimeout(() => {
-                               toast.style.visibility = 'hidden';
-                               toast.style.transform = 'translateY(30px)';
-                            }, 400);
-                        }, 3000);
-
-                        colorIndex = (colorIndex + 1) % toastColors.length;
-
+            document.querySelector('.app-container').addEventListener('click', e => {
+                const btn = e.target.closest('.btn');
+                if (!btn) return;
+                const { platform, clipboardText } = btn.dataset;
+                if (platform) openAppModal(platform);
+                if (clipboardText) {
+                    navigator.clipboard.writeText(clipboardText).then(() => {
+                        showToast(`复制 ${btn.textContent.trim()} 成功！`);
                     }).catch(err => {
-                        console.error('无法复制文本: ', err);
-                        toast.textContent = '复制失败，请重试';
-                        toast.style.backgroundColor = '#ef4444';
-                        toast.style.border = '1px solid #ef4444';
+                        console.error('复制失败: ', err);
+                        showToast('复制失败，请重试', false);
                     });
-                });
+                }
+            });
+            appModal.addEventListener('click', e => {
+                if (e.target === appModal || e.target.classList.contains('modal-close-btn')) {
+                    appModal.style.display = 'none';
+                }
             });
         });
     </script>
 </body>
-</html>
+</html>```
