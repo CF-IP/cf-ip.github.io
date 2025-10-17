@@ -44,13 +44,12 @@
         .social-links a { color: var(--text-light); text-decoration: none; transition: all 0.2s ease-in-out; }
         .social-links a:hover { color: var(--primary-color); transform: scale(1.1); }
         .social-links svg { width: 32px; height: 32px; }
-        #toastNotification { position: fixed; top: 2rem; right: 2rem; background-color: rgba(56, 189, 248, 0.9); color: #fff; padding: 1rem 1.5rem; border-radius: 8px; z-index: 10001; opacity: 0; visibility: hidden; transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out, visibility 0.3s; transform: translateY(-20px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border: 1px solid var(--primary-color); }
-        #toastNotification.show { opacity: 1; visibility: visible; transform: translateY(0); }
+        #toastNotification { position: fixed; top: 2rem; right: 2rem; color: #fff; padding: 1rem 1.5rem; border-radius: 8px; z-index: 10001; opacity: 0; visibility: hidden; transform: translateY(30px); transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.2); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); pointer-events: none; }
         @media (max-width: 768px) {
             html { font-size: 15px; }
             .app-container { padding: 0 .8rem; }
             header { margin-top: 2.5rem; margin-bottom: 1.5rem; }
-            #toastNotification { top: 1rem; right: 1rem; left: 1rem; text-align: center; transform: translateY(-20px); }
+            #toastNotification { top: 1rem; right: 1rem; left: 1rem; text-align: center; }
         }
     </style>
 </head>
@@ -149,14 +148,12 @@
                     const latestRelease = releases[0];
                     if (!latestRelease.assets || latestRelease.assets.length === 0) return null;
 
-                    for (const keyword of keywords) {
-                        const asset = latestRelease.assets.find(a => {
-                            const assetName = a.name.toLowerCase();
-                            return keywords.every(kw => assetName.includes(kw.toLowerCase()));
-                        });
-                        if (asset) return asset.browser_download_url;
-                    }
-
+                    const asset = latestRelease.assets.find(a => {
+                        const assetName = a.name.toLowerCase();
+                        return keywords.every(kw => assetName.includes(kw.toLowerCase()));
+                    });
+                    if (asset) return asset.browser_download_url;
+                    
                     const fallbackAsset = latestRelease.assets.find(a => {
                          const assetName = a.name.toLowerCase();
                          return keywords.some(kw => assetName.includes(kw.toLowerCase()));
@@ -201,25 +198,43 @@
             const subButtons = document.querySelectorAll('.subscription-section .btn');
             const toast = document.getElementById('toastNotification');
             let toastTimeout;
+            
+            const toastColors = ['#38bdf8', '#34d399', '#f59e0b', '#ec4899', '#8b5cf6'];
+            let colorIndex = 0;
 
             subButtons.forEach(button => {
                 button.addEventListener('click', () => {
                     const textToCopy = button.dataset.clipboardText;
+                    const subName = button.textContent.trim();
+
                     navigator.clipboard.writeText(textToCopy).then(() => {
-                        toast.textContent = '复制成功';
-                        toast.classList.add('show');
+                        const currentColor = toastColors[colorIndex];
+                        toast.textContent = `复制 ${subName} 成功！`;
+                        toast.style.backgroundColor = currentColor;
+                        toast.style.border = `1px solid ${currentColor}`;
+                        
                         clearTimeout(toastTimeout);
+                        
+                        toast.style.visibility = 'visible';
+                        toast.style.opacity = '1';
+                        toast.style.transform = 'translateY(0)';
+
                         toastTimeout = setTimeout(() => {
-                            toast.classList.remove('show');
+                            toast.style.opacity = '0';
+                            toast.style.transform = 'translateY(-30px)';
+                            toastTimeout = setTimeout(() => {
+                               toast.style.visibility = 'hidden';
+                               toast.style.transform = 'translateY(30px)';
+                            }, 400);
                         }, 3000);
+
+                        colorIndex = (colorIndex + 1) % toastColors.length;
+
                     }).catch(err => {
                         console.error('无法复制文本: ', err);
-                        toast.textContent = '复制失败';
-                        toast.classList.add('show');
-                        clearTimeout(toastTimeout);
-                        toastTimeout = setTimeout(() => {
-                            toast.classList.remove('show');
-                        }, 3000);
+                        toast.textContent = '复制失败，请重试';
+                        toast.style.backgroundColor = '#ef4444';
+                        toast.style.border = '1px solid #ef4444';
                     });
                 });
             });
