@@ -65,6 +65,7 @@ def fetch_subscription_content(sub_url):
         }
         response = requests.get(sub_url, headers=headers, timeout=20)
         response.raise_for_status()
+        # 直接返回文本，解码操作留给后续处理
         return response.text
     except requests.RequestException as e:
         print(f"Error fetching subscription content: {e}")
@@ -103,15 +104,16 @@ def main():
     if not raw_content:
         return
 
+    node_links = []
     try:
-        # Base64解码
+        # 尝试Base64解码
         decoded_content = base64.b64decode(raw_content).decode('utf-8')
         node_links = decoded_content.strip().splitlines()
-        print(f"Decoded {len(node_links)} nodes from subscription.")
-    except (base64.binascii.Error, UnicodeDecodeError) as e:
-        print(f"Failed to decode subscription content: {e}")
-        # 如果解码失败，尝试将内容本身作为节点列表处理
-        print("Assuming content is not Base64 encoded, processing directly.")
+        print(f"Successfully decoded Base64 content. Found {len(node_links)} nodes.")
+    except (base64.binascii.Error, UnicodeDecodeError, ValueError) as e:
+        # *** 关键改动在这里 ***
+        # 如果解码失败 (包括ValueError)，则将原始内容作为纯文本处理
+        print(f"Failed to decode as Base64 ({type(e).__name__}: {e}). Assuming content is plain text.")
         node_links = raw_content.strip().splitlines()
         
     results = []
