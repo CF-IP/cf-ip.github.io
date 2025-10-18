@@ -106,25 +106,31 @@ def main():
         node_links = raw_content.strip().splitlines()
         
     results = []
-    location_pattern = re.compile(r'^[A-Z]{2}')
+    location_pattern = re.compile(r'([A-Z]{2})')
 
+    print("\n--- Filtering and Formatting Nodes ---")
     for link in node_links:
         parsed_node = parse_node_link(link)
         
         if parsed_node and parsed_node.get('ip') and parsed_node.get('location'):
             remarks = parsed_node['location'].strip()
             ip_address = parsed_node['ip']
+            
+            print(f"  - Parsed: IP={ip_address}, Raw Remarks='{remarks}'")
 
-            match = location_pattern.match(remarks)
+            match = location_pattern.search(remarks)
             if match:
-                two_letter_code = match.group(0)
+                two_letter_code = match.group(1)
                 output_line = f"{two_letter_code} {ip_address}"
                 results.append(output_line)
+                print(f"    - Kept! Extracted Code: {two_letter_code}, Output: '{output_line}'")
+            else:
+                print(f"    - Discarded. Remarks do not contain a two-letter uppercase code.")
 
     OUTPUT_DIR.mkdir(exist_ok=True)
 
     if not results:
-        print("No valid nodes matched the filtering criteria. Writing an empty proxy.txt.")
+        print("\nNo valid nodes matched the filtering criteria. Writing an empty proxy.txt.")
         OUTPUT_FILE.write_text("", 'utf-8')
         return
 
@@ -141,10 +147,10 @@ def main():
                 pass
         
         if has_changed:
-            print(f"Data has changed. Writing {len(unique_results)} filtered nodes to {OUTPUT_FILE}")
+            print(f"\nData has changed. Writing {len(unique_results)} filtered nodes to {OUTPUT_FILE}")
             OUTPUT_FILE.write_text(new_content, 'utf-8')
         else:
-            print("Data has not changed. No update needed.")
+            print("\nData has not changed. No update needed.")
 
     except IOError as e:
         print(f"Error writing to file {OUTPUT_FILE}: {e}")
