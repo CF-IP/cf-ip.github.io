@@ -3,6 +3,7 @@ name: Scrape and Update IP Data
 on:
   workflow_dispatch:
   schedule:
+    # 每5分钟运行一次
     - cron: '*/5 * * * *'
 
 jobs:
@@ -26,21 +27,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run scraper script
+      - name: Run main IP scraper script
         run: python scraper.py
+      
+      - name: Run proxy subscription scraper script
+        run: python proxy_scraper.py
 
       - name: Commit and push if changed
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
+          # 将 data 目录下所有 tsv 和 txt 文件的改动添加到暂存区
+          # 这会自动包含 scraper.py 和 proxy_scraper.py 生成的所有文件
           git add data/*.tsv data/*.txt
           
+          # 检查是否有文件改动，如果没有则退出
           if git diff --staged --quiet; then
             echo "No data changes to commit."
             exit 0
           fi
           
+          # 如果有改动，则提交并推送
           echo "Data has changed, committing files..."
-          git commit -m "Update IP data files"
+          git commit -m "Update IP and proxy data files"
           git push
