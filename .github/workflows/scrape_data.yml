@@ -29,14 +29,8 @@ jobs:
       - name: Run main IP scraper script
         run: python scraper.py
       
-      - name: Run DEBUG fetch script for subscription
-        run: python debug_fetch.py
-
-      - name: Upload raw subscription content for debugging
-        uses: actions/upload-artifact@v4
-        with:
-          name: raw-sub-content
-          path: data/raw_subscription_content.txt
+      - name: Run proxy subscription scraper script
+        run: python proxy_scraper.py
 
       - name: Commit and push if changed
         run: |
@@ -51,5 +45,5 @@ jobs:
           fi
           
           echo "Data has changed, committing files..."
-          git commit -m "Debug: Add raw subscription content"
+          git commit -m "Update IP and proxy data files"
           git push
