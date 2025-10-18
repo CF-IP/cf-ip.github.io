@@ -1,10 +1,8 @@
-import base64
-import json
 import re
 from pathlib import Path
-from urllib.parse import urlparse, unquote
 import requests
 from bs4 import BeautifulSoup
+import yaml
 
 INITIAL_URL = "https://getsub.classelivre.eu.org/sub"
 OUTPUT_DIR = Path("data")
@@ -16,7 +14,7 @@ def fetch_html_page(url):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36'
         }
-        response = requests.get(url, headers=headers, timeout=20)
+        response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         return response.text
     except requests.RequestException as e:
@@ -59,28 +57,11 @@ def fetch_subscription_content(sub_url):
     print(f"Fetching subscription content from: {sub_url}")
     try:
         headers = {'User-Agent': 'Clash/2023.08.17'}
-        response = requests.get(sub_url, headers=headers, timeout=20)
+        response = requests.get(sub_url, headers=headers, timeout=30)
         response.raise_for_status()
         return response.text
     except requests.RequestException as e:
         print(f"Error fetching subscription content: {e}")
-        return None
-
-def parse_node_link(link):
-    try:
-        if link.startswith('vless://'):
-            parsed_url = urlparse(link)
-            address = parsed_url.hostname
-            remarks = unquote(parsed_url.fragment)
-            return {'ip': address, 'location': remarks}
-        elif link.startswith('vmess://'):
-            b64_data = link[8:]
-            padded_b64 = b64_data + '=' * (-len(b64_data) % 4)
-            decoded_data = base64.b64decode(padded_b64).decode('utf-8')
-            vmess_json = json.loads(decoded_data)
-            return {'ip': vmess_json.get('add'), 'location': vmess_json.get('ps')}
-    except Exception as e:
-        print(f"Could not parse node link: {link[:40]}... Error: {e}")
         return None
 
 def main():
@@ -96,41 +77,37 @@ def main():
     if not raw_content:
         return
 
-    node_links = []
-    try:
-        decoded_content = base64.b64decode(raw_content).decode('utf-8')
-        node_links = decoded_content.strip().splitlines()
-        print(f"Successfully decoded Base64 content. Found {len(node_links)} potential nodes.")
-    except (base64.binascii.Error, UnicodeDecodeError, ValueError) as e:
-        print(f"Failed to decode as Base64 ({type(e).__name__}). Assuming content is plain text.")
-        node_links = raw_content.strip().splitlines()
-        
     results = []
     location_pattern = re.compile(r'([A-Z]{2})')
 
-    print("\n--- Filtering and Formatting Nodes ---")
-    for link in node_links:
-        parsed_node = parse_node_link(link)
+    try:
+        print("Attempting to parse content as YAML...")
+        data = yaml.safe_load(raw_content)
         
-        if parsed_node and parsed_node.get('ip') and parsed_node.get('location'):
-            remarks = parsed_node['location'].strip()
-            ip_address = parsed_node['ip']
+        if isinstance(data, dict) and 'proxies' in data:
+            proxies = data['proxies']
+            print(f"Successfully parsed YAML. Found {len(proxies)} proxies.")
             
-            print(f"  - Parsed: IP={ip_address}, Raw Remarks='{remarks}'")
+            for proxy in proxies:
+                if 'name' in proxy and 'server' in proxy:
+                    remarks = proxy['name']
+                    ip_address = proxy['server']
+                    
+                    match = location_pattern.search(remarks)
+                    if match:
+                        two_letter_code = match.group(1)
+                        output_line = f"{two_letter_code} {ip_address}"
+                        results.append(output_line)
+        else:
+            print("YAML parsed, but no 'proxies' key found.")
 
-            match = location_pattern.search(remarks)
-            if match:
-                two_letter_code = match.group(1)
-                output_line = f"{two_letter_code} {ip_address}"
-                results.append(output_line)
-                print(f"    - Kept! Extracted Code: {two_letter_code}, Output: '{output_line}'")
-            else:
-                print(f"    - Discarded. Remarks do not contain a two-letter uppercase code.")
+    except yaml.YAMLError as e:
+        print(f"Could not parse YAML content: {e}")
 
     OUTPUT_DIR.mkdir(exist_ok=True)
 
     if not results:
-        print("\nNo valid nodes matched the filtering criteria. Writing an empty proxy.txt.")
+        print("No valid nodes matched the filtering criteria. Writing an empty proxy.txt.")
         OUTPUT_FILE.write_text("", 'utf-8')
         return
 
@@ -147,10 +124,10 @@ def main():
                 pass
         
         if has_changed:
-            print(f"\nData has changed. Writing {len(unique_results)} filtered nodes to {OUTPUT_FILE}")
+            print(f"Data has changed. Writing {len(unique_results)} filtered nodes to {OUTPUT_FILE}")
             OUTPUT_FILE.write_text(new_content, 'utf-8')
         else:
-            print("\nData has not changed. No update needed.")
+            print("Data has not changed. No update needed.")
 
     except IOError as e:
         print(f"Error writing to file {OUTPUT_FILE}: {e}")
