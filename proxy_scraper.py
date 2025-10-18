@@ -6,18 +6,11 @@ from urllib.parse import urlparse, unquote
 import requests
 from bs4 import BeautifulSoup
 
-# 目标页面，从中提取真实的订阅链接
 INITIAL_URL = "https://getsub.classelivre.eu.org/sub"
-
-# 用于匹配真实订阅链接的结构化正则表达式
-SUB_LINK_PATTERN_RE = r'(https?://[^\s\'"]+/sub\?uuid=[^\s\'"]+)'
-
-# 输出文件路径
 OUTPUT_DIR = Path("data")
 OUTPUT_FILE = OUTPUT_DIR / "proxy.txt"
 
 def fetch_html_page(url):
-    """获取指定URL的HTML内容"""
     print(f"Fetching initial HTML page: {url}")
     try:
         headers = {
@@ -31,27 +24,38 @@ def fetch_html_page(url):
         return None
 
 def extract_subscription_link(html_content):
-    """从HTML内容中基于链接结构提取真实的订阅链接"""
-    print("Extracting the real subscription link based on its structure...")
-    match = re.search(SUB_LINK_PATTERN_RE, html_content)
-    if match:
-        link = match.group(0).replace('&amp;', '&')
-        print(f"Found subscription link via Regex: {link}")
-        return link
-    
-    print("Regex failed, trying BeautifulSoup fallback...")
+    print("Attempting to extract subscription link from styled div...")
     soup = BeautifulSoup(html_content, 'html.parser')
-    for a_tag in soup.find_all('a', href=True):
-        if '/sub?uuid=' in a_tag['href']:
-            link = a_tag['href'].replace('&amp;', '&')
-            print(f"Found subscription link with BeautifulSoup: {link}")
+    
+    def find_blurry_div(tag):
+        return (
+            tag.name == 'div' and 
+            tag.has_attr('style') and 
+            'blur' in tag['style'] and 
+            'word-break' in tag['style']
+        )
+
+    target_div = soup.find(find_blurry_div)
+
+    if target_div:
+        div_text = target_div.get_text(strip=True)
+        url_match = re.search(r'https?://[^\s]+', div_text)
+        if url_match:
+            link = url_match.group(0).replace('&amp;', '&')
+            print(f"Found subscription link inside div: {link}")
             return link
-            
+
+    print("Primary method failed. Falling back to generic regex search...")
+    fallback_match = re.search(r'(https?://[^\s\'"]+/sub\?uuid=[^\s\'"]+)', html_content)
+    if fallback_match:
+        link = fallback_match.group(0).replace('&amp;', '&')
+        print(f"Found subscription link via fallback regex: {link}")
+        return link
+
     print("Could not find the subscription link using any method.")
     return None
 
 def fetch_subscription_content(sub_url):
-    """获取订阅链接的原始内容"""
     print(f"Fetching subscription content from: {sub_url}")
     try:
         headers = {'User-Agent': 'Clash/2023.08.17'}
@@ -63,7 +67,6 @@ def fetch_subscription_content(sub_url):
         return None
 
 def parse_node_link(link):
-    """解析单个节点链接 (vless:// 或 vmess://)"""
     try:
         if link.startswith('vless://'):
             parsed_url = urlparse(link)
@@ -81,7 +84,6 @@ def parse_node_link(link):
         return None
 
 def main():
-    """主执行函数"""
     html = fetch_html_page(INITIAL_URL)
     if not html:
         return
@@ -104,25 +106,18 @@ def main():
         node_links = raw_content.strip().splitlines()
         
     results = []
-    # --- 关键改动在这里 ---
-    # 编译一个正则表达式，用于匹配以两个大写字母开头
     location_pattern = re.compile(r'^[A-Z]{2}')
 
     for link in node_links:
         parsed_node = parse_node_link(link)
         
-        # 确保节点解析成功并包含IP和地区信息
         if parsed_node and parsed_node.get('ip') and parsed_node.get('location'):
             remarks = parsed_node['location'].strip()
             ip_address = parsed_node['ip']
 
-            # 应用新的过滤规则
             match = location_pattern.match(remarks)
             if match:
-                # 如果节点名称匹配成功（以两个大写字母开头）
-                two_letter_code = match.group(0)  # 提取这两个字母
-                
-                # 按照 "两个字母 IP地址" 的格式添加到结果列表
+                two_letter_code = match.group(0)
                 output_line = f"{two_letter_code} {ip_address}"
                 results.append(output_line)
 
@@ -134,7 +129,6 @@ def main():
         return
 
     try:
-        # 去重并保持顺序
         unique_results = list(dict.fromkeys(results))
         new_content = "\n".join(unique_results)
         
